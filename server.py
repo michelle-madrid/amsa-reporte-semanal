@@ -370,6 +370,7 @@ def _generar(d):
                 informes_paths      = informes_paths,
                 incluir_sso         = d.get("incluir_sso", True),
                 incluir_gh          = d.get("incluir_gh",  True),
+                disco               = d.get("disco") or None,
             )
         else:
             # ── Modo Word nuevo: generación completa (comportamiento original) ──
@@ -391,6 +392,7 @@ def _generar(d):
                 nombre_override = nombre_custom,
                 incluir_sso     = d.get("incluir_sso", True),
                 incluir_gh      = d.get("incluir_gh",  True),
+                disco           = d.get("disco") or None,
             )
 
         # Verificar formato del documento generado

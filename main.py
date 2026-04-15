@@ -181,6 +181,7 @@ def actualizar_secciones_word(
     informes_paths=None,   # dict clave → ruta del Word fuente de cada faena a actualizar
     incluir_sso=True,
     incluir_gh=True,
+    disco=None,
 ):
     """
     Carga un Word existente y regenera solo las secciones de las faenas indicadas.
@@ -241,7 +242,7 @@ def actualizar_secciones_word(
 
     # ── Actualizar vínculos Excel solo para las faenas seleccionadas ──
     if actualizar_vinculos:
-        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year)
+        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
         dirs_parcial = {k: v for k, v in rutas["informes_dirs"].items()
                         if k in faenas_actualizar}
         if dirs_parcial:
@@ -269,7 +270,7 @@ def actualizar_secciones_word(
 # ─────────────────────────────────────────────────────────────────────────────
 # Generar informe semanal completo a partir de los archivos de entrada.
 # ─────────────────────────────────────────────────────────────────────────────
-def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True):
+def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True, disco=None):
     def pedir_entero(mensaje, minimo, maximo):
         while True:
             valor = input(mensaje).strip()
@@ -334,7 +335,7 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True):
         return seleccionar_archivo(mensaje)
 
     if MODO_DEBUG:
-        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year)
+        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
         excel_madre       = _resolver_archivo(rutas["excel_madre"], "Excel Base")
         excel_indicadores = _resolver_unico_xlsx(rutas["excel_indicadores_dir"], "Excel de indicadores")
         carpeta_destino   = rutas["carpeta_destino"] if Path(rutas["carpeta_destino"]).is_dir() else seleccionar_carpeta()
