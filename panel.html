@@ -1,0 +1,2126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Control de Gestión AMSA - Reporte Semanal</title>
+<style>
+  /* ── Variables ─────────────────────────────────────────────────── */
+  :root {
+    --teal:    #2BC4BF;
+    --teal-d:  #126F7A;
+    --amber:   #F5A623;
+    --amber-d: #C47F00;
+    --gray:    #4A5568;
+    --gray-l:  #718096;
+    --bg:      #F0F4F5;
+    --card:    #FFFFFF;
+    --border:  #D1D9E0;
+    --ok:      #27AE60;
+    --err:     #E53E3E;
+    --radius:  8px;
+    --shadow:  0 2px 8px rgba(0,0,0,.08);
+  }
+
+  /* ── Reset ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         background: var(--bg); color: var(--gray); font-size: 14px; line-height: 1.5; }
+  input, select, button, textarea { font: inherit; }
+
+  /* ── Header ─────────────────────────────────────────────────────── */
+  .header {
+    background: linear-gradient(135deg, var(--teal-d) 0%, var(--teal) 100%);
+    color: #fff; padding: 16px 32px;
+    display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.18);
+  }
+  .header-logo { font-size: 20px; font-weight: 700; letter-spacing: .3px; }
+  .header-sub  { font-size: 12px; opacity: .78; margin-top: 2px; }
+  .header-spacer { flex: 1; }
+  .status-pill {
+    display: flex; align-items: center; gap: 7px;
+    padding: 5px 14px; border-radius: 20px;
+    background: rgba(255,255,255,.18); font-size: 12px; font-weight: 600;
+    transition: background .3s;
+  }
+  .status-pill .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #7DFFB3; transition: background .3s;
+  }
+  .status-pill.running { background: rgba(245,166,35,.35); }
+  .status-pill.running .dot { background: var(--amber); animation: blink 1s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(400%)} }
+
+  /* ── Tab nav ────────────────────────────────────────────────────── */
+  .tabs { background: var(--card); border-bottom: 2px solid var(--border);
+          display: flex; padding: 0 32px; }
+  .tab-btn {
+    padding: 13px 20px; border: none; background: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; color: var(--gray-l);
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    transition: color .2s, border-color .2s;
+  }
+  .tab-btn:hover  { color: var(--teal-d); }
+  .tab-btn.active { color: var(--teal-d); border-bottom-color: var(--teal); }
+  .tab-icon { margin-right: 6px; }
+
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  .main { padding: 28px 32px; max-width: 980px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* ── Cards ──────────────────────────────────────────────────────── */
+  .card {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 22px 24px; margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--teal-d); margin-bottom: 16px;
+    padding-bottom: 10px; border-bottom: 2px solid var(--bg);
+  }
+  .card-subtitle {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .6px; color: var(--gray-l);
+    margin: 18px 0 10px; padding-top: 14px;
+    border-top: 1px solid var(--bg);
+  }
+
+  /* ── Form elements ──────────────────────────────────────────────── */
+  .form-grid { display: grid; gap: 14px; }
+  .form-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .form-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; font-weight: 600; text-transform: uppercase;
+                 letter-spacing: .6px; color: var(--gray-l); }
+  .field input, .field select {
+    padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+    background: #FAFBFC; color: var(--gray); transition: border-color .2s;
+    width: 100%;
+  }
+  .field input:focus, .field select:focus {
+    outline: none; border-color: var(--teal); background: #fff;
+  }
+
+  .field-hint { font-size: 11px; color: var(--gray-l); margin-top: 3px; display: block; }
+  .field-hint.ok  { color: var(--ok); }
+  .field-hint.err { color: var(--err); }
+  .field-hint code {
+    background: #EDF2F7; border-radius: 3px; padding: 1px 5px;
+    font-size: 11px; font-family: monospace; color: var(--gray);
+  }
+
+  /* ── Path display (config tab) ──────────────────────────────────── */
+  .path-box {
+    background: #F7F8FA; border: 1.5px solid var(--border); border-radius: 6px;
+    padding: 8px 12px; font-size: 12px; color: var(--gray-l);
+    word-break: break-all; min-height: 36px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .path-box.ok  { border-color: var(--ok);  background: #F0FFF4; color: #276749; }
+  .path-box.err { border-color: var(--err); background: #FFF5F5; color: #9B2C2C; }
+
+  /* ── Browse row ─────────────────────────────────────────────────── */
+  .browse-row { display: flex; gap: 6px; align-items: center; }
+  .browse-row input {
+    flex: 1; min-width: 0;
+    padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+    background: #FAFBFC; color: var(--gray); transition: border-color .2s;
+  }
+  .browse-row input:focus {
+    outline: none; border-color: var(--teal); background: #fff;
+  }
+  .btn-browse {
+    flex-shrink: 0; padding: 7px 12px;
+    border: 1.5px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--gray-l);
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    white-space: nowrap; transition: all .2s;
+  }
+  .btn-browse:hover {
+    border-color: var(--teal); background: #fff; color: var(--teal-d);
+  }
+  .path-status {
+    font-size: 12px; font-weight: 700; flex-shrink: 0; min-width: 16px;
+    text-align: center;
+  }
+  .path-status.ok  { color: var(--ok); }
+  .path-status.err { color: var(--err); }
+
+  /* ── Path label row ─────────────────────────────────────────────── */
+  .path-field {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    align-items: start;
+    gap: 10px 14px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--bg);
+  }
+  .path-field:last-child { border-bottom: none; }
+  .path-field .pf-label {
+    font-size: 12px; font-weight: 600; color: var(--gray);
+    padding-top: 10px;
+  }
+  .path-field .pf-right { display: flex; flex-direction: column; gap: 4px; }
+
+  /* ── Checkboxes de compañías ────────────────────────────────────── */
+  .companies { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+  .company-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 20px;
+    border: 2px solid var(--border); cursor: pointer;
+    font-size: 13px; font-weight: 600; color: var(--gray-l);
+    transition: all .2s; user-select: none;
+  }
+  .company-chip:hover { border-color: var(--teal); color: var(--teal-d); }
+  .company-chip input { display: none; }
+  .company-chip.checked { background: var(--teal); border-color: var(--teal); color: #fff; }
+
+  /* ── Toggle ─────────────────────────────────────────────────────── */
+  .toggle-row { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+  .toggle { position: relative; width: 40px; height: 22px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; inset: 0; border-radius: 22px;
+    background: var(--border); cursor: pointer; transition: .2s;
+  }
+  .toggle-slider::before {
+    content: ""; position: absolute; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff;
+    left: 3px; top: 3px; transition: .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  }
+  .toggle input:checked + .toggle-slider { background: var(--teal); }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+  .toggle-label { font-size: 13px; color: var(--gray); }
+
+  /* ── Buttons ────────────────────────────────────────────────────── */
+  .btn {
+    padding: 9px 22px; border-radius: 6px; border: none; cursor: pointer;
+    font-size: 13px; font-weight: 600; transition: all .2s; display: inline-flex;
+    align-items: center; gap: 7px;
+  }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-primary  { background: var(--teal);   color: #fff; }
+  .btn-primary:hover:not(:disabled)  { background: var(--teal-d); }
+  .btn-amber    { background: var(--amber);  color: #fff; }
+  .btn-amber:hover:not(:disabled)    { background: var(--amber-d); }
+  .btn-ghost    { background: transparent; color: var(--gray-l); border: 1.5px solid var(--border); }
+  .btn-ghost:hover:not(:disabled)    { border-color: var(--teal); color: var(--teal-d); }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 4px; align-items: center; }
+
+  /* ── Section sep ────────────────────────────────────────────────── */
+  .section-sep { height: 1px; background: var(--bg); margin: 16px 0; }
+
+  /* ── Consola fija ───────────────────────────────────────────────── */
+  .console-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: #1A202C;
+    box-shadow: 0 -2px 12px rgba(0,0,0,.25);
+    transition: height .25s ease;
+  }
+  .console-bar.collapsed { height: 36px; }
+  .console-bar.expanded  { height: 340px; }
+
+  .console-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 16px; height: 36px; cursor: pointer;
+    border-bottom: 1px solid #2D3748; user-select: none;
+  }
+  .console-header .c-title { color: #A0AEC0; font-size: 11px; font-weight: 700;
+                              text-transform: uppercase; letter-spacing: .8px; }
+  .console-header .c-spacer { flex: 1; }
+  .console-header .c-btn {
+    background: none; border: none; color: #718096; cursor: pointer;
+    font-size: 11px; padding: 3px 7px; border-radius: 4px; transition: background .2s;
+  }
+  .console-header .c-btn:hover { background: #2D3748; color: #E2E8F0; }
+  .c-badge {
+    display: none; padding: 2px 8px; border-radius: 12px;
+    background: rgba(245,166,35,.25); color: var(--amber);
+    font-size: 11px; font-weight: 700;
+  }
+  .c-badge.visible { display: inline-block; }
+
+  .console-body {
+    height: calc(100% - 36px); overflow-y: auto;
+    padding: 10px 16px; font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px; line-height: 1.65; color: #CBD5E0;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .console-body::-webkit-scrollbar { width: 5px; }
+  .console-body::-webkit-scrollbar-track { background: #1A202C; }
+  .console-body::-webkit-scrollbar-thumb { background: #4A5568; border-radius: 3px; }
+
+  .log-ok   { color: #68D391; }
+  .log-err  { color: #FC8181; }
+  .log-warn { color: #F6AD55; }
+  .log-info { color: #90CDF4; }
+
+  /* Bottom spacer so content isn't hidden by console */
+  .page-bottom { height: 56px; }
+
+  /* ── Progreso inline (tab Generar) ─────────────────────────────── */
+  .inline-log {
+    background: var(--card); border-radius: var(--radius);
+    border: 1.5px solid var(--border); box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .inline-log-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 18px; background: #FAFBFC;
+    border-bottom: 1.5px solid var(--border);
+  }
+  .inline-log-header .il-title {
+    font-size: 12px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .7px; color: var(--teal-d); flex: 1;
+  }
+  .inline-log-header .il-btn {
+    background: none; border: 1px solid var(--border); color: var(--gray-l);
+    cursor: pointer; font-size: 11px; padding: 3px 10px;
+    border-radius: 5px; transition: background .2s, color .2s;
+  }
+  .inline-log-header .il-btn:hover { background: var(--bg); color: var(--gray); }
+  .il-badge {
+    padding: 3px 10px; border-radius: 12px;
+    background: rgba(245,166,35,.15); color: var(--amber-d);
+    font-size: 11px; font-weight: 700; display: none;
+  }
+  .il-badge.visible { display: inline-block; }
+  .inline-log-body {
+    max-height: 380px; overflow-y: auto; padding: 8px 0;
+  }
+  /* Ítems de progreso */
+  .prog-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 4px 18px; font-size: 13px; line-height: 1.55;
+  }
+  .prog-item .pi-icon {
+    flex-shrink: 0; width: 16px; text-align: center; margin-top: 1px; font-style: normal;
+  }
+  .prog-item .pi-text { color: var(--gray); word-break: break-word; }
+  .prog-item.pi-ok   .pi-icon,
+  .prog-item.pi-ok   .pi-text { color: var(--ok); }
+  .prog-item.pi-warn .pi-icon,
+  .prog-item.pi-warn .pi-text { color: #975A16; }
+  .prog-item.pi-err  .pi-icon,
+  .prog-item.pi-err  .pi-text { color: var(--err); font-weight: 600; }
+  .prog-item.pi-sep  { padding-top: 10px; padding-bottom: 2px; }
+  .prog-item.pi-sep  .pi-text {
+    color: var(--teal-d); font-weight: 700; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .5px;
+    border-top: 1px solid var(--bg); padding-top: 6px; width: 100%;
+  }
+  .prog-item.pi-sep  .pi-icon { display: none; }
+  .prog-item.pi-done .pi-text { color: var(--gray-l); font-size: 12px; }
+  .inline-log-body::-webkit-scrollbar { width: 5px; }
+  .inline-log-body::-webkit-scrollbar-track { background: var(--bg); }
+  .inline-log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Card colapsable (rutas archivos en tab Generar) ────────────── */
+  .coll-wrap {
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden;
+  }
+  .coll-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px; cursor: pointer;
+    border-bottom: 1.5px solid transparent;
+    transition: background .15s, border-color .15s; user-select: none;
+  }
+  .coll-header:hover { background: var(--bg); }
+  .coll-header.open  { border-bottom-color: var(--border); }
+  .coll-title { font-size: 12px; font-weight: 700; text-transform: uppercase;
+               letter-spacing: .7px; color: var(--teal-d); }
+  .coll-hint  { font-size: 12px; color: var(--gray-l); flex: 1; }
+  .coll-arrow { color: var(--gray-l); font-size: 11px;
+                transition: transform .2s; display: inline-block; }
+  .coll-header.open .coll-arrow { transform: rotate(90deg); }
+  .coll-body  { padding: 4px 20px 16px; }
+
+  /* ── Ítems de revisión manual ───────────────────────────────────── */
+  .revisa-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 12px; margin-bottom: 6px;
+    background: #FFFBEB; border: 1px solid #FDE68A;
+    border-radius: 6px; font-size: 13px; line-height: 1.5;
+  }
+  .revisa-item .ri-icon {
+    flex-shrink: 0; color: #D97706; font-weight: 700;
+    margin-top: 1px; font-size: 14px;
+  }
+  .revisa-item .ri-text { color: #78350F; }
+  .result-path {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin-top: 6px; padding: 10px 14px;
+    background: #F0FFF4; border: 1px solid #9AE6B4;
+    border-radius: 6px; font-size: 13px;
+  }
+  .result-path .rp-label { color: var(--gray-l); font-size: 11px; font-weight: 600;
+                           text-transform: uppercase; letter-spacing: .5px; }
+  .result-path .rp-val   { color: var(--ok); font-weight: 600; word-break: break-all; }
+
+  /* ── Disco compartido (pregunta carpeta semana) ─────────────────── */
+  .disco-question {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px; flex-wrap: wrap;
+  }
+  .disco-question .disco-lbl {
+    font-size: 12px; font-weight: 600; color: var(--gray);
+  }
+  .disco-opt {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 13px; color: var(--gray); cursor: pointer;
+    padding: 4px 10px; border-radius: 20px;
+    border: 1.5px solid var(--border); transition: all .15s;
+    user-select: none;
+  }
+  .disco-opt:hover { border-color: var(--teal); color: var(--teal-d); }
+  .disco-opt input[type="radio"] { accent-color: var(--teal); }
+  .disco-nombre-row {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 8px;
+  }
+  .disco-nombre-row label {
+    font-size: 12px; font-weight: 600; color: var(--gray); white-space: nowrap;
+  }
+  .disco-nombre-row input {
+    width: 72px !important; text-transform: uppercase;
+    padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 6px;
+    background: #FAFBFC; color: var(--gray); transition: border-color .2s;
+    font-size: 13px;
+  }
+  .disco-nombre-row input:focus { outline: none; border-color: var(--teal); background: #fff; }
+  .disco-nombre-row .disco-hint {
+    font-size: 11px; color: var(--gray-l);
+  }
+
+  /* ── Ayuda memoria semana ──────────────────────────────────────── */
+  .semana-memoria {
+    grid-column: 1 / -1;
+    padding: 9px 14px; margin-top: 4px;
+    background: #EBF8FF; border: 1px solid #90CDF4;
+    border-radius: 6px; font-size: 12px; color: #2B6CB0;
+    line-height: 1.55;
+  }
+  .semana-memoria .sm-week  { font-weight: 700; }
+  .semana-memoria .sm-det   { opacity: .75; margin-top: 2px; font-size: 11px; }
+
+  /* ── Tags ───────────────────────────────────────────────────────── */
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px;
+         font-size: 11px; font-weight: 600; }
+  .tag-teal  { background: #E6FAF9; color: var(--teal-d); }
+
+  /* ── Resultados de validación ───────────────────────────────────── */
+  .res-stat-box {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px; border-radius: 8px; font-size: 13px;
+    cursor: pointer; user-select: none;
+    border: 2px solid transparent;
+    transition: transform .15s, box-shadow .15s, border-color .15s;
+  }
+  .res-stat-box:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
+  .res-stat-box .rsb-num { font-size: 24px; font-weight: 700; line-height: 1; }
+  .res-stat-box .rsb-lbl { font-size: 11px; opacity: .8; margin-top: 2px; }
+  .res-stat-box .rsb-hint { font-size: 10px; opacity: .55; margin-top: 1px; }
+  .rsb-ok   { background: #F0FFF4; color: #276749; }
+  .rsb-warn { background: #FFFBEB; color: #975A16; }
+  .rsb-none { background: #FFF5F5; color: #9B2C2C; }
+  .rsb-ok.active   { border-color: #27AE60; box-shadow: 0 0 0 3px rgba(39,174,96,.15); }
+  .rsb-warn.active { border-color: #D69E2E; box-shadow: 0 0 0 3px rgba(214,158,46,.15); }
+  .rsb-none.active { border-color: #E53E3E; box-shadow: 0 0 0 3px rgba(229,62,62,.15); }
+
+  .res-section { border: 1.5px solid var(--border); border-radius: 8px;
+                 overflow: hidden; margin-bottom: 10px; }
+  .res-sec-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 11px 16px; cursor: pointer; user-select: none;
+    background: #F7F8FA; transition: background .15s;
+  }
+  .res-sec-header:hover { background: #EEF2F5; }
+  .res-sec-header.ok   { border-left: 4px solid var(--ok); }
+  .res-sec-header.warn { border-left: 4px solid var(--amber); }
+  .res-sec-header.sin_celda { border-left: 4px solid #CBD5E0; }
+  .res-sec-header .rsh-name { font-size: 13px; font-weight: 700; color: var(--gray); flex:1; }
+  .res-sec-header .rsh-badge {
+    font-size: 11px; font-weight: 600; padding: 2px 9px;
+    border-radius: 12px; white-space: nowrap;
+  }
+  .rsh-badge.ok   { background: #C6F6D5; color: #276749; }
+  .rsh-badge.warn { background: #FEEBC8; color: #975A16; }
+  .rsh-badge.sin_celda { background: #E2E8F0; color: var(--gray-l); }
+  .res-sec-arrow { font-size: 11px; color: var(--gray-l); }
+
+  .res-sec-body { display: none; }
+  .res-sec-body.open { display: block; }
+
+  .kpi-row {
+    display: grid;
+    grid-template-columns: 22px minmax(160px, 1fr) auto;
+    gap: 4px 12px; align-items: start;
+    padding: 7px 16px; font-size: 12px;
+    border-top: 1px solid #F0F4F5;
+  }
+  .kpi-row.ok        { background: transparent; }
+  .kpi-row.revisar   { background: #FFFBEB; }
+  .kpi-row.sin_celda { background: #FFF5F5; }
+  .kpi-row.sin_label { color: var(--gray-l); }
+
+  .kpi-icon { font-size: 13px; padding-top: 1px; }
+  .kpi-label { font-weight: 600; color: var(--gray); }
+  .kpi-vals { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px;
+              font-family: "Consolas","Courier New",monospace; font-size: 11px;
+              color: var(--gray-l); }
+  .kpi-val-ok   { color: var(--ok); }
+  .kpi-val-warn { color: var(--err); font-weight: 700; }
+  .kpi-val-lbl  {
+    display: inline-block; font-family: inherit;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .4px; opacity: .55; margin-right: 4px;
+    min-width: 28px;
+  }
+  .kpi-extra { font-size: 11px; color: var(--gray-l); padding-top: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ── Header ───────────────────────────────────────────────────────────── -->
+<header class="header">
+  <div>
+    <div class="header-logo">Control de Gestión AMSA — Reporte Semanal</div>
+    <div class="header-sub">Antofagasta Minerals · Informe Semanal</div>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="status-pill" id="statusPill">
+    <div class="dot"></div>
+    <span id="statusText">Listo</span>
+  </div>
+</header>
+
+<!-- ── Tabs ─────────────────────────────────────────────────────────────── -->
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="config" onclick="showTab(this)">
+    <span class="tab-icon">⚙</span>Configuración
+  </button>
+  <button class="tab-btn" data-tab="generar" onclick="showTab(this)">
+    <span class="tab-icon">▶</span>Generar
+  </button>
+  <button class="tab-btn" data-tab="validar" onclick="showTab(this)">
+    <span class="tab-icon">✓</span>Validar KPIs
+  </button>
+  <button class="tab-btn" data-tab="pdf" onclick="showTab(this)">
+    Gramática
+  </button>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Tab: Configuración
+  ════════════════════════════════════════════════════════════════════ -->
+  <div class="panel active" id="tab-config">
+
+    <div class="card">
+      <div class="card-title">📅 Datos de la Semana</div>
+      <div class="form-grid cols-3">
+        <div class="field">
+          <label>N° Semana</label>
+          <input type="number" id="num_semana" min="1" max="53" placeholder="ej. 14" oninput="onSemanaChange()">
+        </div>
+        <div class="field">
+          <label>Año</label>
+          <input type="number" id="year" min="2020" max="2100" placeholder="ej. 2026" oninput="onSemanaChange()">
+        </div>
+        <div></div>
+        <div class="field">
+          <label>Día inicio</label>
+          <input type="number" id="dia_inicio" min="1" max="31" placeholder="1-31" oninput="onSemanaChange()">
+        </div>
+        <div class="field">
+          <label>Mes inicio</label>
+          <select id="mes_inicio" onchange="onSemanaChange()">
+            <option value="" disabled selected>— mes —</option>
+            <option value="1">Enero</option>
+            <option value="2">Febrero</option>
+            <option value="3">Marzo</option>
+            <option value="4">Abril</option>
+            <option value="5">Mayo</option>
+            <option value="6">Junio</option>
+            <option value="7">Julio</option>
+            <option value="8">Agosto</option>
+            <option value="9">Septiembre</option>
+            <option value="10">Octubre</option>
+            <option value="11">Noviembre</option>
+            <option value="12">Diciembre</option>
+          </select>
+        </div>
+        <div></div>
+        <div class="field">
+          <label>Día fin</label>
+          <input type="number" id="dia_fin" min="1" max="31" placeholder="1-31" oninput="onSemanaChange()">
+        </div>
+        <div class="field">
+          <label>Mes fin</label>
+          <select id="mes_fin" onchange="onSemanaChange()">
+            <option value="" disabled selected>— mes —</option>
+            <option value="1">Enero</option>
+            <option value="2">Febrero</option>
+            <option value="3">Marzo</option>
+            <option value="4">Abril</option>
+            <option value="5">Mayo</option>
+            <option value="6">Junio</option>
+            <option value="7">Julio</option>
+            <option value="8">Agosto</option>
+            <option value="9">Septiembre</option>
+            <option value="10">Octubre</option>
+            <option value="11">Noviembre</option>
+            <option value="12">Diciembre</option>
+          </select>
+        </div>
+        <!-- ayuda memoria del calendario -->
+        <div id="semanaMemoria" class="semana-memoria" style="display:none;">
+          <div class="sm-week" id="semanaMemoriaTitulo"></div>
+          <div class="sm-det"  id="semanaMemoriaDetalle"></div>
+        </div>
+      </div>
+
+      <div class="section-sep"></div>
+
+      <div class="field">
+        <label>Carpeta de la semana</label>
+
+        <!-- Pregunta: ¿Disco Compartido? -->
+        <div class="disco-question">
+          <span class="disco-lbl">¿Disco Compartido?</span>
+          <label class="disco-opt">
+            <input type="radio" name="discoComp" value="si" id="discSi"
+                   onchange="onDiscoChange()" checked>
+            Sí
+          </label>
+          <label class="disco-opt">
+            <input type="radio" name="discoComp" value="no" id="discNo"
+                   onchange="onDiscoChange()">
+            No
+          </label>
+        </div>
+
+        <!-- Si disco compartido = Sí: input para la unidad -->
+        <div id="discoNombreRow" class="disco-nombre-row">
+          <label for="discoNombre">Unidad:</label>
+          <input type="text" id="discoNombre" placeholder="ej. N:" maxlength="3"
+                 oninput="onDiscoNombreChange()">
+          <span class="disco-hint">Ej: N:, Z:, X:</span>
+        </div>
+
+        <!-- Campo de ruta (auto-construida si disco=Sí, o manual si disco=No) -->
+        <div class="browse-row">
+          <input type="text" id="pathRaiz" placeholder="— completa los datos arriba —"
+                 oninput="syncDestino()">
+          <span class="path-status" id="pathRaiz_st"></span>
+          <button class="btn-browse" id="btnBrowseRaiz"
+                  onclick="browseFolder('pathRaiz')" style="display:none;">📂 Buscar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title" id="faenasTitulo">🏭 Faenas a incluir</div>
+      <div class="companies" id="companies">
+        <label class="company-chip checked"><input type="checkbox" value="MLP"  checked onchange="toggleChip(this)">MLP</label>
+        <label class="company-chip checked"><input type="checkbox" value="CEN"  checked onchange="toggleChip(this)">CEN</label>
+        <label class="company-chip checked"><input type="checkbox" value="ANT"  checked onchange="toggleChip(this)">ANT</label>
+        <label class="company-chip checked"><input type="checkbox" value="CMZ"  checked onchange="toggleChip(this)">CMZ</label>
+        <label class="company-chip checked"><input type="checkbox" value="FCAB" checked onchange="toggleChip(this)">FCAB</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📄 Modo de generación</div>
+
+      <div class="disco-question" style="margin-bottom:4px;">
+        <span class="disco-lbl">¿Tipo de Word?</span>
+        <label class="disco-opt">
+          <input type="radio" name="modoWord" value="nuevo" id="modoNuevo"
+                 onchange="onModoWordChange()" checked>
+          Word Nuevo
+        </label>
+        <label class="disco-opt">
+          <input type="radio" name="modoWord" value="existente" id="modoExistente"
+                 onchange="onModoWordChange()">
+          Word Existente
+        </label>
+      </div>
+
+      <!-- Visible solo en modo existente -->
+      <div id="wordExistenteRow" style="display:none; margin-top:14px;">
+        <div class="path-field" style="border-bottom:none;">
+          <div class="pf-label">Word preliminar</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_word_existente" placeholder="Selecciona el Word existente…">
+              <span class="path-status" id="g_word_existente_st"></span>
+              <button class="btn-browse" onclick="browseWordExistente()">📂 Buscar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 Información disponible</div>
+      <p style="font-size:12px; color:var(--gray-l); margin-bottom:14px;">
+        Si aún no llegó la información, desactiva la sección — no se pedirá la ruta y el informe pondrá <em>"En espera de envío información"</em>.
+      </p>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="opt_sso" checked onchange="updateRutasVisibility()">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>SSO</strong> — Base Datos (<code>BDatos*.xlsx</code>) y Descripción de eventos (<code>06 -SSO\</code>)
+        </span>
+      </div>
+
+      <div class="section-sep"></div>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="opt_gh" checked onchange="updateRutasVisibility()">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">
+          <strong>Gestión Hídrica</strong> — Seguimiento indicadores (<code>seguimiento*.xlsx</code>, <code>07 -...\</code>)
+        </span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">▶ Opciones de generación</div>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="opt_vinculos">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Actualizar vínculos del Excel antes de generar</span>
+      </div>
+
+      <div class="section-sep"></div>
+
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="opt_validar_kpis">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Validar KPIs automáticamente al terminar la generación</span>
+      </div>
+
+      <div class="section-sep"></div>
+
+      <div class="form-grid cols-2" style="align-items:end;">
+        <div class="field">
+          <label>Nombre del archivo de salida</label>
+          <input type="text" id="g_nombre" placeholder="Informe_Automatizado"
+                 title="Nombre sin extensión.">
+        </div>
+        <div style="padding-bottom:2px; color:var(--gray-l); font-size:12px;">
+          Dejar vacío para usar nombre predeterminado.
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-config -->
+
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Tab: Generar
+  ════════════════════════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-generar">
+
+    <!-- Rutas colapsables -->
+    <div class="coll-wrap">
+      <div class="coll-header" id="rutasHeader" onclick="toggleRutas()">
+        <span class="coll-title">📂 Rutas de archivos</span>
+        <span class="coll-hint">Detectadas automáticamente — clic para revisar o modificar</span>
+        <span class="coll-arrow" id="rutasArrow">▶</span>
+      </div>
+      <div class="coll-body" id="rutasBody" style="display:none;">
+
+        <div class="path-field" style="margin-top:10px;">
+          <div class="pf-label">Excel madre</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_excel_madre" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_excel_madre_st"></span>
+              <button class="btn-browse" onclick="browse('g_excel_madre','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>Semana N -  DD mmm al DD mmm.xlsx</code> (en carpeta raíz de la semana)</span>
+          </div>
+        </div>
+
+        <div class="path-field" data-seccion="sso">
+          <div class="pf-label">Excel indicadores<br><span style="font-weight:400; color:var(--gray-l);">(Base Datos SSO)</span></div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_excel_ind" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_excel_ind_st"></span>
+              <button class="btn-browse" onclick="browse('g_excel_ind','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>BDatos*.xlsx</code> (en subcarpeta <code>06 -SSO\</code>)</span>
+          </div>
+        </div>
+
+        <div class="path-field">
+          <div class="pf-label">Carpeta destino</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_destino" placeholder="— carpeta de la semana —">
+              <span class="path-status" id="g_destino_st"></span>
+              <button class="btn-browse" onclick="browseFolder('g_destino')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Carpeta raíz de la semana — el informe .docx se guardará aquí</span>
+          </div>
+        </div>
+
+        <div class="card-subtitle">Informes Word por faena</div>
+
+        <div class="path-field" data-faena="MLP">
+          <div class="pf-label">MLP — Los Pelambres</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_inf_MLP" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_inf_MLP_st"></span>
+              <button class="btn-browse" onclick="browse('g_inf_MLP','word')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>01 -MLP\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="CEN">
+          <div class="pf-label">CEN — Centinela</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_inf_CEN" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_inf_CEN_st"></span>
+              <button class="btn-browse" onclick="browse('g_inf_CEN','word')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>02 -CEN\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="ANT">
+          <div class="pf-label">ANT — Antucoya</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_inf_ANT" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_inf_ANT_st"></span>
+              <button class="btn-browse" onclick="browse('g_inf_ANT','word')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>03 -ANT\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="CMZ">
+          <div class="pf-label">CMZ — Zaldívar</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_inf_CMZ" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_inf_CMZ_st"></span>
+              <button class="btn-browse" onclick="browse('g_inf_CMZ','word')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>04 -CMZ\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="FCAB">
+          <div class="pf-label">FCAB</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_inf_FCAB" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_inf_FCAB_st"></span>
+              <button class="btn-browse" onclick="browse('g_inf_FCAB','word')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>05 -FCAB\</code>)</span>
+          </div>
+        </div>
+
+        <div class="card-subtitle" style="margin-top:14px;">Excels por faena</div>
+
+        <div class="path-field" data-faena="MLP">
+          <div class="pf-label">MLP — Los Pelambres</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_MLP" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_MLP_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_MLP','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>mlp semana*.xlsx</code> (en subcarpeta <code>01 -MLP\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="CEN">
+          <div class="pf-label">CEN — Centinela</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_CEN" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_CEN_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_CEN','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>informe semanal*.xlsx</code> (en subcarpeta <code>02 -CEN\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="ANT">
+          <div class="pf-label">ANT — Antucoya</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_ANT" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_ANT_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_ANT','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>informe semanal*.xlsx</code> (en subcarpeta <code>03 -ANT\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="CMZ">
+          <div class="pf-label">CMZ — Zaldívar</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_CMZ" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_CMZ_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_CMZ','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>proyectado*.xlsx</code> (en subcarpeta <code>04 -CMZ\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-faena="FCAB">
+          <div class="pf-label">FCAB</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_FCAB" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_FCAB_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_FCAB','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>amsa*.xlsx</code> (en subcarpeta <code>05 -FCAB\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-seccion="sso">
+          <div class="pf-label">SSO</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_SSO" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_SSO_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_SSO','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>eventos seguridad*.xlsx</code> (en subcarpeta <code>06 -SSO\</code>)</span>
+          </div>
+        </div>
+        <div class="path-field" data-seccion="gh" style="border-bottom:none;">
+          <div class="pf-label">Gestión Hídrica</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_exc_GH" placeholder="— auto-detectado —">
+              <span class="path-status" id="g_exc_GH_st"></span>
+              <button class="btn-browse" onclick="browse('g_exc_GH','excel')">📂 Buscar</button>
+            </div>
+            <span class="field-hint">Patrón: <code>seguimiento*.xlsx</code> (en subcarpeta <code>07 -...\</code>)</span>
+          </div>
+        </div>
+
+      </div><!-- /coll-body -->
+    </div><!-- /coll-wrap rutas -->
+
+    <!-- Botón generar -->
+    <div class="btn-row" style="margin-bottom:20px;">
+      <button class="btn btn-primary" id="btnGenerar" onclick="lanzarGenerar()">
+        ▶ &nbsp;<span id="btnGenerarLabel">Generar Informe</span>
+      </button>
+      <span id="generarMsg" style="font-size:12px; color:var(--gray-l);"></span>
+    </div>
+
+    <!-- ① Pasos del proceso (streaming) -->
+    <div id="generarLogWrap" style="display:none; margin-bottom:16px;">
+      <div class="inline-log">
+        <div class="inline-log-header">
+          <span class="il-title">Pasos del proceso</span>
+          <span class="il-badge" id="ilBadge">● Ejecutando</span>
+          <button class="il-btn" onclick="copyInlineLog()">Copiar log</button>
+        </div>
+        <div class="inline-log-body" id="generarLogBody"></div>
+      </div>
+    </div>
+
+    <!-- ② Elementos para revisar manualmente (solo advertencias) -->
+    <div id="generarRevisarWrap" style="display:none; margin-bottom:16px;">
+      <div class="card" style="border-left:4px solid #D69E2E; padding-left:20px;">
+        <div class="card-title" style="color:#975A16; border-bottom-color:#FEF3C7;">
+          ⚠ Revisar antes de publicar
+        </div>
+        <p style="font-size:12px; color:var(--gray-l); margin-bottom:12px;">
+          Los siguientes elementos necesitan verificación manual:
+        </p>
+        <div id="generarRevisarBody"></div>
+      </div>
+    </div>
+
+    <!-- ③ Resultado final -->
+    <div id="generarResultWrap" style="display:none; margin-bottom:16px;">
+      <div class="card" style="border-left:4px solid var(--ok); padding-left:20px;">
+        <div class="card-title" style="color:var(--ok); border-bottom-color:#F0FFF4;">
+          ✓ Informe generado correctamente
+        </div>
+        <div id="generarResultMsg" style="font-size:13px; color:var(--gray); margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <!-- ④ Resultados validación KPIs (solo si opt_validar_kpis activo) -->
+    <div id="generarKpiWrap" style="display:none; margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">📊 Validación de KPIs</div>
+        <div class="res-summary-wrap" id="genResSummary"
+             style="display:flex; gap:18px; margin-bottom:18px; flex-wrap:wrap;"></div>
+        <div id="genResSections"></div>
+      </div>
+    </div>
+
+  </div><!-- /tab-generar -->
+
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Tab: Validar KPIs
+  ════════════════════════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-validar">
+
+    <div class="card">
+      <div class="card-title">✓ Validar KPIs — Word vs Excel</div>
+      <p style="font-size:13px; color:var(--gray-l); margin-bottom:18px;">
+        Compara los valores numéricos del Word final contra las celdas de desviación del Excel madre.
+      </p>
+
+      <div class="path-field">
+        <div class="pf-label">Word final (.docx)</div>
+        <div class="pf-right">
+          <div class="browse-row">
+            <input type="text" id="val_word" placeholder="C:\ruta\al\informe.docx">
+            <button class="btn-browse" onclick="browse('val_word','word')">📂 Buscar</button>
+          </div>
+          <span class="field-hint" id="hint_val_word"></span>
+        </div>
+      </div>
+
+      <div class="path-field">
+        <div class="pf-label">Excel madre (.xlsx)</div>
+        <div class="pf-right">
+          <div class="browse-row">
+            <input type="text" id="val_excel" placeholder="C:\ruta\al\semana.xlsx">
+            <button class="btn-browse" onclick="browse('val_excel','excel')">📂 Buscar</button>
+          </div>
+          <span class="field-hint" id="hint_val_excel"></span>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:18px;">
+        <button class="btn btn-primary" id="btnValidar" onclick="lanzarValidar()">
+          ✓ &nbsp;Validar
+        </button>
+        <button class="btn btn-ghost" onclick="autoFillValidar()">
+          ↻ &nbsp;Autocompletar desde semana
+        </button>
+      </div>
+    </div>
+
+    <!-- Resultados de validación -->
+    <div id="validarResultados" style="display:none;">
+      <div class="card">
+        <div class="card-title" id="resTitle">📊 Resultados de Validación</div>
+        <div id="resSummary" class="res-summary-wrap"
+             style="display:flex; gap:18px; margin-bottom:18px; flex-wrap:wrap;"></div>
+        <div id="resSections"></div>
+      </div>
+    </div>
+
+  </div><!-- /tab-validar -->
+
+
+  <!-- ════════════════════════════════════════════════════════════════
+       Tab: Gramática
+  ════════════════════════════════════════════════════════════════════ -->
+  <div class="panel" id="tab-pdf">
+
+    <div class="card">
+      <div class="card-title">Gramática</div>
+      <p style="font-size:13px; color:var(--gray-l); margin-bottom:18px;">
+        Analiza el informe Word en busca de errores de concordancia, género,
+        palabras duplicadas y sugerencias gramaticales (vía LanguageTool).<br>
+      </p>
+
+      <div class="path-field" style="border-bottom:none;">
+        <div class="pf-label">Informe Word (.docx)</div>
+        <div class="pf-right">
+          <div class="browse-row">
+            <input type="text" id="ort_ruta" placeholder="C:\ruta\al\informe.docx">
+            <button class="btn-browse" onclick="browse('ort_ruta','word')">📂 Buscar</button>
+          </div>
+          <span class="field-hint" id="hint_ort"></span>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:18px;">
+        <button class="btn btn-amber" id="btnPDF" onclick="lanzarOrtografia()">
+          ✍ &nbsp;Revisar
+        </button>
+      </div>
+    </div>
+
+    <!-- Estado de carga -->
+    <div id="gramLogWrap" style="display:none; margin-bottom:16px;">
+      <div class="inline-log">
+        <div class="inline-log-header">
+          <span class="il-title">Análisis gramatical</span>
+          <span class="il-badge visible" id="gramBadge"
+                style="background:rgba(245,166,35,.25); color:var(--amber-d);">
+            ● Analizando…
+          </span>
+        </div>
+        <!-- Barra de progreso indeterminada -->
+        <div id="gramProgress" style="height:3px; background:var(--bg); overflow:hidden;">
+          <div id="gramProgressBar"
+               style="height:100%; width:30%; background:var(--amber);
+                      border-radius:2px; animation:slide 1.4s ease-in-out infinite;">
+          </div>
+        </div>
+        <div class="inline-log-body" id="gramLogBody" style="min-height:60px;"></div>
+      </div>
+    </div>
+
+  </div><!-- /tab-pdf -->
+
+  <div class="page-bottom"></div>
+</div><!-- /main -->
+
+
+<!-- ── Consola fija ─────────────────────────────────────────────────────── -->
+<div class="console-bar collapsed" id="consoleBar">
+  <div class="console-header" onclick="toggleConsole()">
+    <span class="c-title">💻 Consola de salida</span>
+    <span class="c-badge" id="consoleBadge">● En ejecución</span>
+    <span class="c-spacer"></span>
+    <button class="c-btn" onclick="event.stopPropagation(); clearLogs()">Limpiar</button>
+    <button class="c-btn" onclick="event.stopPropagation(); copyLogs()">Copiar</button>
+    <span class="c-btn" id="consoleArrow">▲</span>
+  </div>
+  <div class="console-body" id="consoleBody"></div>
+</div>
+
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Estado global
+// ─────────────────────────────────────────────────────────────────────────────
+let logOffset    = 0;
+let pollTimer    = null;
+let running      = false;
+let consoleOpen  = false;
+let semanaTimer  = null;
+let inlineActive  = false;   // true cuando el log inline está activo (tarea generar)
+let reviewItems   = [];      // advertencias acumuladas durante la generación
+let resultPath    = '';      // ruta del informe generado
+let _calendario   = {};      // { "1": {dia_inicio,mes_inicio,dia_fin,mes_fin,detalles}, ... }
+let gramActive    = false;   // true cuando el log inline de gramática está activo
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tabs
+// ─────────────────────────────────────────────────────────────────────────────
+function showTab(btn) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Company chips
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleChip(cb) {
+  cb.closest('.company-chip').classList.toggle('checked', cb.checked);
+  updateRutasVisibility();
+}
+
+function getFaenas() {
+  return [...document.querySelectorAll('#companies input:checked')].map(c => c.value);
+}
+
+// Muestra/oculta las filas de rutas según las faenas activas y la info disponible.
+function updateRutasVisibility() {
+  const activas = new Set(getFaenasActualizar());
+  const ssoOk   = document.getElementById('opt_sso') ? document.getElementById('opt_sso').checked : true;
+  const ghOk    = document.getElementById('opt_gh')  ? document.getElementById('opt_gh').checked  : true;
+
+  // Filas por faena
+  document.querySelectorAll('#rutasBody .path-field[data-faena]').forEach(row => {
+    row.style.display = activas.has(row.dataset.faena) ? '' : 'none';
+  });
+  // Filas SSO (Excel indicadores + Excel SSO)
+  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso"]').forEach(row => {
+    row.style.display = ssoOk ? '' : 'none';
+  });
+  // Fila Gestión Hídrica
+  document.querySelectorAll('#rutasBody .path-field[data-seccion="gh"]').forEach(row => {
+    row.style.display = ghOk ? '' : 'none';
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Calendario de semanas (auto-relleno de fechas)
+// ─────────────────────────────────────────────────────────────────────────────
+async function fetchCalendario() {
+  try {
+    const r = await fetch('/api/calendario');
+    const j = await r.json();
+    if (j.semanas) _calendario = j.semanas;
+  } catch(e) { /* sin calendario */ }
+}
+
+const _MESES_CORTO = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function aplicarCalendario(numSemana) {
+  const datos = _calendario[String(numSemana)];
+  const mem   = document.getElementById('semanaMemoria');
+  if (!datos) { if (mem) mem.style.display = 'none'; return false; }
+
+  document.getElementById('dia_inicio').value = datos.dia_inicio;
+  document.getElementById('mes_inicio').value = datos.mes_inicio;
+  document.getElementById('dia_fin').value    = datos.dia_fin;
+  document.getElementById('mes_fin').value    = datos.mes_fin;
+
+  if (mem) {
+    const mi = _MESES_CORTO[datos.mes_inicio] || datos.mes_inicio;
+    const mf = _MESES_CORTO[datos.mes_fin]    || datos.mes_fin;
+    document.getElementById('semanaMemoriaTitulo').textContent =
+      `Semana ${numSemana}: del ${datos.dia_inicio} ${mi} al ${datos.dia_fin} ${mf}`;
+    document.getElementById('semanaMemoriaDetalle').textContent = datos.detalles || '';
+    mem.style.display = '';
+  }
+  return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Semana data
+// ─────────────────────────────────────────────────────────────────────────────
+function getSemanaData() {
+  const i = id => parseInt(document.getElementById(id).value);
+  const [ns, di, mi, df, mf, yr] =
+    ['num_semana','dia_inicio','mes_inicio','dia_fin','mes_fin','year'].map(i);
+  if ([ns,di,mi,df,mf,yr].some(isNaN)) return null;
+  return { num_semana:ns, dia_inicio:di, mes_inicio:mi, dia_fin:df, mes_fin:mf, year:yr };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Disco Compartido
+// ─────────────────────────────────────────────────────────────────────────────
+function getDiscoMode() {
+  const si = document.getElementById('discSi');
+  return si && si.checked ? 'si' : 'no';
+}
+
+function getDiscoNombre() {
+  const el = document.getElementById('discoNombre');
+  if (!el) return '';
+  let val = el.value.trim().toUpperCase();
+  // Asegurar que termina en ":"
+  if (val && !val.endsWith(':')) val += ':';
+  return val;
+}
+
+function onDiscoChange() {
+  const modo = getDiscoMode();
+  const nombreRow = document.getElementById('discoNombreRow');
+  const btnBrowse = document.getElementById('btnBrowseRaiz');
+
+  if (modo === 'si') {
+    if (nombreRow) nombreRow.style.display = 'flex';
+    if (btnBrowse) btnBrowse.style.display = 'none';
+  } else {
+    if (nombreRow) nombreRow.style.display = 'none';
+    if (btnBrowse) btnBrowse.style.display = '';
+    // Limpiar la ruta auto-construida para que el usuario elija con browser
+    fillInput('pathRaiz', '', null);
+    fillInput('g_destino', '', null);
+  }
+  // Re-disparar fetchSemanaInfo si el modo es disco compartido
+  if (modo === 'si') {
+    clearTimeout(semanaTimer);
+    semanaTimer = setTimeout(fetchSemanaInfo, 300);
+  }
+}
+
+function onDiscoNombreChange() {
+  // Cuando cambia la unidad, re-calcular rutas
+  clearTimeout(semanaTimer);
+  semanaTimer = setTimeout(fetchSemanaInfo, 500);
+}
+
+function onSemanaChange() {
+  const ns = parseInt(document.getElementById('num_semana').value);
+  if (!isNaN(ns) && ns >= 1 && ns <= 53) {
+    aplicarCalendario(ns);
+  } else {
+    const mem = document.getElementById('semanaMemoria');
+    if (mem) mem.style.display = 'none';
+  }
+  clearTimeout(semanaTimer);
+  semanaTimer = setTimeout(fetchSemanaInfo, 700);
+}
+
+async function fetchSemanaInfo() {
+  const data = getSemanaData();
+  if (!data) {
+    fillInput('pathRaiz', '', null);
+    return;
+  }
+
+  // Si el modo es disco compartido, sólo ejecutar cuando hay unidad definida
+  const modo = getDiscoMode();
+  if (modo === 'si') {
+    const disco = getDiscoNombre();
+    if (!disco) {
+      fillInput('pathRaiz', '', null);
+      return;
+    }
+    data.disco = disco;
+  }
+  // modo 'no': el usuario elige la carpeta con el browser; syncDestino se encarga
+  if (modo === 'no') return;
+
+  try {
+    const r = await fetch('/api/semana-info', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    const j = await r.json();
+    if (j.error) {
+      fillInput('pathRaiz', '', false);
+      const st = document.getElementById('pathRaiz_st');
+      if (st) { st.textContent = '✗ ' + j.error; st.className = 'path-status err'; }
+      return;
+    }
+    // Config tab: show root path
+    fillInput('pathRaiz', j.raiz, j.raiz_ok);
+
+    // Generar tab: fill all path inputs
+    fillInput('g_excel_madre', j.excel_madre,       j.excel_madre_ok);
+    fillInput('g_excel_ind',   j.excel_indicadores,  j.excel_indicadores_ok);
+    fillInput('g_destino',     j.carpeta_destino,    j.carpeta_destino_ok);
+
+    // nombre archivo default
+    const elNombre = document.getElementById('g_nombre');
+    if (!elNombre.value.trim() && j.nombre_archivo)
+      elNombre.value = j.nombre_archivo;
+
+    // informes Word por faena
+    for (const clave of ['MLP','CEN','ANT','CMZ','FCAB']) {
+      const p = (j.informes || {})[clave] || '';
+      fillInput('g_inf_' + clave, p, !!p);
+    }
+    // Excels por faena (incluye SSO y Gestión Hídrica)
+    for (const clave of ['MLP','CEN','ANT','CMZ','FCAB']) {
+      const e = (j.excels_faena || {})[clave] || '';
+      fillInput('g_exc_' + clave, e, !!e);
+    }
+    fillInput('g_exc_SSO', (j.excels_faena || {})['SSO']             || '', !!(j.excels_faena || {})['SSO']);
+    fillInput('g_exc_GH',  (j.excels_faena || {})['Gestión Hídrica'] || '', !!(j.excels_faena || {})['Gestión Hídrica']);
+  } catch(e) {
+    fillInput('pathRaiz', '', false);
+    const st = document.getElementById('pathRaiz_st');
+    if (st) { st.textContent = '⚠ Servidor no disponible'; st.className = 'path-status err'; }
+  }
+}
+
+function setPath(id, text, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'path-box' + (ok === true ? ' ok' : ok === false ? ' err' : '');
+}
+
+function fillInput(inputId, value, ok) {
+  const el = document.getElementById(inputId);
+  if (!el) return;
+  el.value = value || '';
+  const st = document.getElementById(inputId + '_st');
+  if (st) {
+    st.textContent = ok === true ? '✓' : ok === false ? '✗' : '';
+    st.className   = 'path-status' + (ok === true ? ' ok' : ok === false ? ' err' : '');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Browse (abre dialogo nativo vía server)
+// ─────────────────────────────────────────────────────────────────────────────
+async function browse(inputId, tipos = 'todos') {
+  try {
+    const r = await fetch('/api/browse-file', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ title: 'Seleccionar archivo', tipos })
+    });
+    const j = await r.json();
+    if (j.path) {
+      document.getElementById(inputId).value = j.path;
+      // Update status for generar tab inputs
+      const st = document.getElementById(inputId + '_st');
+      if (st) { st.textContent = '✓'; st.className = 'path-status ok'; }
+      // Update hint for validar/pdf inputs
+      const hint = document.getElementById('hint_' + inputId);
+      if (hint) { hint.textContent = '✓ Ruta seleccionada'; hint.className = 'field-hint ok'; }
+    }
+  } catch(e) {
+    alert('No se pudo abrir el selector. ¿Está ejecutando server.py?');
+  }
+}
+
+async function browseFolder(inputId) {
+  try {
+    const r = await fetch('/api/browse-folder', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ title: 'Seleccionar carpeta' })
+    });
+    const j = await r.json();
+    if (j.path) {
+      const el = document.getElementById(inputId);
+      el.value = j.path;
+      const st = document.getElementById(inputId + '_st');
+      if (st) { st.textContent = '✓'; st.className = 'path-status ok'; }
+      el.dispatchEvent(new Event('input')); // activa syncDestino si es pathRaiz
+    }
+  } catch(e) {
+    alert('No se pudo abrir el selector. ¿Está ejecutando server.py?');
+  }
+}
+
+function syncDestino() {
+  const raiz  = document.getElementById('pathRaiz').value.trim();
+  const gDest = document.getElementById('g_destino');
+  if (gDest) gDest.value = raiz;
+
+  // Cuando el modo es "No disco compartido" y hay una ruta elegida,
+  // pedir al servidor que detecte todos los archivos dentro de esa carpeta
+  if (getDiscoMode() === 'no' && raiz) {
+    clearTimeout(semanaTimer);
+    semanaTimer = setTimeout(() => fetchSemanaInfoConRaiz(raiz), 400);
+  }
+}
+
+async function fetchSemanaInfoConRaiz(raiz) {
+  const data = getSemanaData();
+  if (!data) return;
+  data.raiz_override = raiz;
+  try {
+    const r = await fetch('/api/semana-info', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(data)
+    });
+    const j = await r.json();
+    if (j.error) return;
+
+    fillInput('g_excel_madre', j.excel_madre,        j.excel_madre_ok);
+    fillInput('g_excel_ind',   j.excel_indicadores,   j.excel_indicadores_ok);
+    fillInput('g_destino',     j.carpeta_destino,     j.carpeta_destino_ok);
+
+    const elNombre = document.getElementById('g_nombre');
+    if (!elNombre.value.trim() && j.nombre_archivo)
+      elNombre.value = j.nombre_archivo;
+
+    for (const clave of ['MLP','CEN','ANT','CMZ','FCAB']) {
+      fillInput('g_inf_' + clave, (j.informes     || {})[clave] || '', !!(j.informes     || {})[clave]);
+      fillInput('g_exc_' + clave, (j.excels_faena || {})[clave] || '', !!(j.excels_faena || {})[clave]);
+    }
+    fillInput('g_exc_SSO', (j.excels_faena || {})['SSO']             || '', !!(j.excels_faena || {})['SSO']);
+    fillInput('g_exc_GH',  (j.excels_faena || {})['Gestión Hídrica'] || '', !!(j.excels_faena || {})['Gestión Hídrica']);
+  } catch(e) { /* servidor no disponible, ignorar */ }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Autocompletar validar desde semana info
+// ─────────────────────────────────────────────────────────────────────────────
+function autoFillValidar() {
+  const data = getSemanaData();
+  if (!data) { alert('Completa primero los datos de la semana en la pestaña Configuración.'); return; }
+  if (getDiscoMode() === 'si') {
+    const disco = getDiscoNombre();
+    if (disco) data.disco = disco;
+  }
+  fetch('/api/semana-info', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  }).then(r => r.json()).then(j => {
+    if (j.excel_madre) {
+      document.getElementById('val_excel').value = j.excel_madre;
+      const h = document.getElementById('hint_val_excel');
+      if (h) { h.textContent = j.excel_madre_ok ? '✓ Encontrado' : '✗ No encontrado'; h.className = 'field-hint ' + (j.excel_madre_ok ? 'ok' : 'err'); }
+    }
+  }).catch(() => alert('No se pudo conectar con el servidor.'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lanzar tareas
+// ─────────────────────────────────────────────────────────────────────────────
+async function lanzarGenerar() {
+  const data = getSemanaData();
+  if (!data) {
+    alert('Completa todos los datos de la semana en la pestaña Configuración.');
+    return;
+  }
+
+  const modo = getModoWord();
+  const wordExistente = modo === 'existente'
+    ? document.getElementById('g_word_existente').value.trim()
+    : '';
+
+  if (modo === 'existente' && !wordExistente) {
+    alert('En modo "Word Existente" debes seleccionar el Word preliminar.');
+    return;
+  }
+
+  const faenasSeleccionadas = getFaenasActualizar();
+  if (modo === 'existente' && faenasSeleccionadas.length === 0) {
+    alert('Selecciona al menos una sección a actualizar.');
+    return;
+  }
+
+  const payload = {
+    ...data,
+    faenas:              faenasSeleccionadas,
+    word_existente:      wordExistente,
+    incluir_sso:         document.getElementById('opt_sso')  ? document.getElementById('opt_sso').checked  : true,
+    incluir_gh:          document.getElementById('opt_gh')   ? document.getElementById('opt_gh').checked   : true,
+    actualizar_vinculos: document.getElementById('opt_vinculos').checked,
+    nombre_archivo:      document.getElementById('g_nombre').value.trim(),
+    excel_madre:         document.getElementById('g_excel_madre').value.trim(),
+    excel_indicadores:   document.getElementById('g_excel_ind').value.trim(),
+    carpeta_destino:     document.getElementById('g_destino').value.trim(),
+    informes: {
+      MLP:  document.getElementById('g_inf_MLP').value.trim(),
+      CEN:  document.getElementById('g_inf_CEN').value.trim(),
+      ANT:  document.getElementById('g_inf_ANT').value.trim(),
+      CMZ:  document.getElementById('g_inf_CMZ').value.trim(),
+      FCAB: document.getElementById('g_inf_FCAB').value.trim(),
+    },
+    excels_faena: {
+      MLP:              document.getElementById('g_exc_MLP').value.trim(),
+      CEN:              document.getElementById('g_exc_CEN').value.trim(),
+      ANT:              document.getElementById('g_exc_ANT').value.trim(),
+      CMZ:              document.getElementById('g_exc_CMZ').value.trim(),
+      FCAB:             document.getElementById('g_exc_FCAB').value.trim(),
+      SSO:              document.getElementById('g_exc_SSO').value.trim(),
+      'Gestión Hídrica': document.getElementById('g_exc_GH').value.trim(),
+    },
+  };
+  // Resetear y mostrar los tres paneles
+  reviewItems = [];
+  resultPath  = '';
+  document.getElementById('generarLogBody').innerHTML    = '';
+  document.getElementById('generarRevisarBody').innerHTML = '';
+  document.getElementById('generarResultMsg').innerHTML   = '';
+  document.getElementById('generarRevisarWrap').style.display = 'none';
+  document.getElementById('generarResultWrap').style.display  = 'none';
+  const wrap  = document.getElementById('generarLogWrap');
+  const badge = document.getElementById('ilBadge');
+  wrap.style.display     = 'block';
+  badge.textContent      = '● Ejecutando';
+  badge.className        = 'il-badge visible';
+  badge.style.background = 'rgba(245,166,35,.25)';
+  badge.style.color      = 'var(--amber-d)';
+  inlineActive = true;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  await _lanzarTarea('/api/generar', payload, 'btnGenerar', () => {
+    inlineActive = false;
+
+    // Badge completado
+    const b = document.getElementById('ilBadge');
+    b.textContent      = '✓ Completado';
+    b.style.background = 'rgba(39,174,96,.22)';
+    b.style.color      = '#276749';
+
+    // Panel ②: Revisar manualmente
+    if (reviewItems.length > 0) {
+      const rbody = document.getElementById('generarRevisarBody');
+      reviewItems.forEach(txt => {
+        const row  = document.createElement('div');
+        const ic   = document.createElement('span');
+        const msg  = document.createElement('span');
+        row.className  = 'revisa-item';
+        ic.className   = 'ri-icon';
+        ic.textContent = '!';
+        msg.className  = 'ri-text';
+        msg.textContent = txt.replace(/^\s*!\s*/, '');
+        row.appendChild(ic); row.appendChild(msg);
+        rbody.appendChild(row);
+      });
+      document.getElementById('generarRevisarWrap').style.display = 'block';
+    }
+
+    // Panel ③: Resultado final
+    if (resultPath) {
+      const parts  = resultPath.replace(/\\/g, '/').split('/');
+      const fname  = parts.pop();
+      const folder = parts.join('/') || resultPath;
+      document.getElementById('generarResultMsg').innerHTML =
+        `<div class="result-path">
+           <span class="rp-label">Archivo</span>
+           <span class="rp-val">📄 ${fname}</span>
+         </div>
+         <div class="result-path" style="margin-top:6px;">
+           <span class="rp-label">Carpeta</span>
+           <span class="rp-val" style="font-weight:400; color:var(--gray);">📁 ${folder}</span>
+         </div>`;
+      document.getElementById('generarResultWrap').style.display = 'block';
+    }
+
+    // Validar KPIs automáticamente si está activado
+    if (document.getElementById('opt_validar_kpis').checked && resultPath) {
+      const ruta_excel = document.getElementById('g_excel_madre').value.trim();
+      if (ruta_excel) {
+        // Rellenar inputs del tab Validar (para que queden disponibles allí también)
+        document.getElementById('val_word').value  = resultPath;
+        document.getElementById('val_excel').value = ruta_excel;
+        // Preparar panel ④ y lanzar validación mostrando resultado aquí mismo
+        const kpiWrap = document.getElementById('generarKpiWrap');
+        kpiWrap.style.display = '';
+        kpiWrap.querySelector('#genResSummary').innerHTML  = '<span style="font-size:12px;color:var(--gray-l);">● Validando KPIs…</span>';
+        kpiWrap.querySelector('#genResSections').innerHTML = '';
+        setTimeout(async () => {
+          await _lanzarTarea('/api/validar', { ruta_word: resultPath, ruta_excel, faenas: getFaenas() }, null, mostrarResultadosEnGenerar);
+        }, 300);
+      }
+    }
+  });
+}
+
+async function lanzarValidar() {
+  const ruta_word  = document.getElementById('val_word').value.trim();
+  const ruta_excel = document.getElementById('val_excel').value.trim();
+  if (!ruta_word || !ruta_excel) {
+    alert('Ingresa (o navega) las rutas del Word y del Excel.');
+    return;
+  }
+  document.getElementById('validarResultados').style.display = 'none';
+  await _lanzarTarea('/api/validar', { ruta_word, ruta_excel, faenas: getFaenas() }, 'btnValidar', mostrarResultados);
+}
+
+async function lanzarOrtografia() {
+  const ruta_docx = document.getElementById('ort_ruta').value.trim();
+  if (!ruta_docx) { alert('Ingresa (o navega) la ruta del informe Word (.docx).'); return; }
+
+  // Preparar panel de carga
+  const wrap = document.getElementById('gramLogWrap');
+  const badge = document.getElementById('gramBadge');
+  const bar   = document.getElementById('gramProgress');
+  const body  = document.getElementById('gramLogBody');
+  body.innerHTML = '';
+  badge.textContent      = '● Analizando…';
+  badge.className        = 'il-badge visible';
+  badge.style.background = 'rgba(245,166,35,.25)';
+  badge.style.color      = 'var(--amber-d)';
+  bar.style.display      = '';
+  wrap.style.display     = 'block';
+  gramActive             = true;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  await _lanzarTarea('/api/revisar-ortografia', { ruta_docx, faenas: getFaenas() }, 'btnPDF', () => {
+    gramActive             = false;
+    bar.style.display      = 'none';
+    badge.textContent      = '✓ Análisis completado';
+    badge.style.background = 'rgba(39,174,96,.22)';
+    badge.style.color      = '#276749';
+  });
+}
+
+async function _lanzarTarea(url, payload, btnId, onDone) {
+  clearLogs();
+  setRunning(true);
+  const btnEl = btnId ? document.getElementById(btnId) : null;
+  if (btnEl) btnEl.disabled = true;
+  try {
+    const r = await fetch(url, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if (!r.ok || j.error) {
+      appendLog('[ERROR] ' + (j.error || r.statusText), 'err');
+      setRunning(false);
+      if (btnEl) btnEl.disabled = false;
+      if (inlineActive) {
+        const b = document.getElementById('ilBadge');
+        b.textContent      = '✗ Error';
+        b.style.background = 'rgba(229,62,62,.22)';
+        b.style.color      = 'var(--err)';
+        inlineActive = false; reviewItems = []; resultPath = '';
+      }
+    } else {
+      startPolling(btnId, onDone);
+    }
+  } catch(e) {
+    appendLog('[ERROR] No se pudo conectar con el servidor. ¿Está ejecutando server.py?', 'err');
+    setRunning(false);
+    if (btnEl) btnEl.disabled = false;
+    if (inlineActive) {
+      const b = document.getElementById('ilBadge');
+      b.textContent      = '✗ Error';
+      b.style.background = 'rgba(229,62,62,.22)';
+      b.style.color      = 'var(--err)';
+      inlineActive = false; reviewItems = []; resultPath = '';
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Polling de logs
+// ─────────────────────────────────────────────────────────────────────────────
+function startPolling(btnId, onDone) {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/logs?offset=' + logOffset);
+      const j = await r.json();
+      j.lines.forEach(l => appendRawLog(l));
+      logOffset = j.next_offset;
+      if (!j.running && running) {
+        setRunning(false);
+        const polledBtn = btnId ? document.getElementById(btnId) : null;
+        if (polledBtn) polledBtn.disabled = false;
+        clearInterval(pollTimer);
+        appendLog('── Tarea finalizada ──', 'info');
+        if (onDone) onDone();
+      }
+    } catch(e) { /* servidor ocupado */ }
+  }, 800);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Consola
+// ─────────────────────────────────────────────────────────────────────────────
+function _makeLogSpan(text) {
+  const span = document.createElement('span');
+  if      (text.includes('[ERROR]'))   span.className = 'log-err';
+  else if (text.includes('[REVISAR]')) span.className = 'log-warn';
+  else if (text.includes('⚠'))         span.className = 'log-warn';
+  else if (text.match(/✓.*→/))         span.className = 'log-info';
+  else if (text.startsWith('  ✓') || text.startsWith('✓')) span.className = 'log-ok';
+  span.textContent = text;
+  return span;
+}
+
+// Crea un ítem de progreso con diseño coherente con el resto de la página
+function _makeProgItem(text, type) {
+  const row  = document.createElement('div');
+  const icon = document.createElement('i');
+  const msg  = document.createElement('span');
+  icon.className = 'pi-icon';
+  msg.className  = 'pi-text';
+
+  const t = text.trimStart();
+
+  if (type === 'err' || text.includes('[ERROR]')) {
+    row.className    = 'prog-item pi-err';
+    icon.textContent = '✗';
+    msg.textContent  = t.replace(/^\[ERROR\]\s*/, '');
+  } else if (type === 'info' || text.includes('──')) {
+    row.className    = 'prog-item pi-sep';
+    icon.textContent = '';
+    msg.textContent  = t.replace(/^─+\s*/, '').replace(/\s*─+$/, '');
+  } else if (type && type !== 'ok') {
+    row.className    = 'prog-item pi-done';
+    icon.textContent = '–';
+    msg.textContent  = t;
+  } else if (text.includes('[REVISAR]') || text.includes('⚠') || /^\s*!/.test(text)) {
+    row.className    = 'prog-item pi-warn';
+    icon.textContent = '!';
+    msg.textContent  = t.replace(/^\s*!\s*/, '');
+  } else if (/^\s*✓/.test(text)) {
+    row.className    = 'prog-item pi-ok';
+    icon.textContent = '✓';
+    msg.textContent  = t.replace(/^\s*✓\s*/, '');
+  } else if (!t || t === '\n') {
+    return null;  // línea vacía — ignorar
+  } else {
+    row.className    = 'prog-item';
+    icon.textContent = '·';
+    msg.textContent  = t;
+  }
+
+  row.appendChild(icon);
+  row.appendChild(msg);
+  return row;
+}
+
+// Patrones de líneas que no se muestran en el log inline (son redundantes con la config)
+const _SKIP_LOG = [
+  'Excel Base:', 'Excel de indicadores:', '(ruta del panel)',
+  'Usando Excel actualizado:', 'No se encontró archivo _act',
+];
+
+function appendRawLog(text) {
+  // Siempre escribir en la consola fija
+  const body = document.getElementById('consoleBody');
+  const span = _makeLogSpan(text);
+  body.appendChild(span);
+  body.scrollTop = body.scrollHeight;
+
+  // Log inline de gramática (sin filtros extra — mostrar todo)
+  if (gramActive) {
+    const gb   = document.getElementById('gramLogBody');
+    const item = _makeProgItem(text);
+    if (item) { gb.appendChild(item); gb.scrollTop = gb.scrollHeight; }
+  }
+
+  if (!inlineActive) return;
+
+  const t = text.trimStart();
+
+  // Detectar ruta del informe generado (siempre, antes de cualquier filtro)
+  if (text.includes('Informe generado en:')) {
+    resultPath = text.replace(/.*Informe generado en:\s*/i, '').trim();
+  }
+
+  // [REVISAR] / ! / ⚠ → solo van a la sección de revisión, NO al log inline
+  if ((t.startsWith('!') || text.includes('[REVISAR]') || text.includes('⚠')) && t.length > 2) {
+    reviewItems.push(text);
+    return;
+  }
+
+  // Mensajes de resolución de archivos → ya están en config, no repetir
+  if (_SKIP_LOG.some(p => text.includes(p))) return;
+
+  const inlineBody = document.getElementById('generarLogBody');
+  const item = _makeProgItem(text);
+  if (item) {
+    inlineBody.appendChild(item);
+    inlineBody.scrollTop = inlineBody.scrollHeight;
+  }
+}
+
+function appendLog(text, type) {
+  const body = document.getElementById('consoleBody');
+  const div  = document.createElement('div');
+  div.className   = type ? 'log-' + type : '';
+  div.textContent = text;
+  body.appendChild(div);
+  body.scrollTop = body.scrollHeight;
+
+  if (inlineActive) {
+    const inlineBody = document.getElementById('generarLogBody');
+    const item = _makeProgItem(text, type);
+    if (item) {
+      inlineBody.appendChild(item);
+      inlineBody.scrollTop = inlineBody.scrollHeight;
+    }
+  }
+}
+
+function clearLogs() {
+  document.getElementById('consoleBody').innerHTML = '';
+  logOffset = 0;
+  fetch('/api/logs/clear', { method: 'POST' }).catch(() => {});
+}
+
+function copyLogs() {
+  const text = document.getElementById('consoleBody').innerText;
+  navigator.clipboard.writeText(text)
+    .then(() => alert('Logs copiados al portapapeles.'))
+    .catch(() => alert('No se pudo copiar.'));
+}
+
+function copyInlineLog() {
+  const text = document.getElementById('generarLogBody').innerText;
+  navigator.clipboard.writeText(text)
+    .then(() => alert('Salida copiada al portapapeles.'))
+    .catch(() => alert('No se pudo copiar.'));
+}
+
+function openConsole() {
+  const bar = document.getElementById('consoleBar');
+  bar.classList.replace('collapsed', 'expanded');
+  document.getElementById('consoleArrow').textContent = '▼';
+  consoleOpen = true;
+}
+
+function toggleConsole() {
+  const bar = document.getElementById('consoleBar');
+  consoleOpen = !consoleOpen;
+  bar.classList.toggle('collapsed', !consoleOpen);
+  bar.classList.toggle('expanded',   consoleOpen);
+  document.getElementById('consoleArrow').textContent = consoleOpen ? '▼' : '▲';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Estado running
+// ─────────────────────────────────────────────────────────────────────────────
+function setRunning(r) {
+  running = r;
+  const pill  = document.getElementById('statusPill');
+  const text  = document.getElementById('statusText');
+  const badge = document.getElementById('consoleBadge');
+  pill.classList.toggle('running', r);
+  text.textContent = r ? 'En ejecución…' : 'Listo';
+  badge.classList.toggle('visible', r);
+  if (!r) {
+    document.querySelectorAll('.btn-primary, .btn-amber').forEach(b => {
+      b.disabled = false;
+    });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resultados de validación
+// ─────────────────────────────────────────────────────────────────────────────
+async function mostrarResultados() {
+  try {
+    const r = await fetch('/api/validar-resultado');
+    const data = await r.json();
+    if (!data || !data.length) return;
+    renderResultados(data, document.getElementById('validarResultados'));
+  } catch(e) { /* silencioso */ }
+}
+
+async function mostrarResultadosEnGenerar() {
+  try {
+    const r = await fetch('/api/validar-resultado');
+    const data = await r.json();
+    if (!data || !data.length) return;
+    const wrap = document.getElementById('generarKpiWrap');
+    wrap.style.display = '';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    renderResultados(data, wrap);
+  } catch(e) { /* silencioso */ }
+}
+
+let activeFilter    = null;   // filtro activo en resultados de validación
+let _kpiContainer   = null;   // contenedor activo para filtrar
+
+function renderResultados(secciones, container) {
+  activeFilter  = null;
+  _kpiContainer = container;
+  container.style.display = '';
+
+  const summaryEl  = container.querySelector('.res-summary-wrap');
+  const sectionsEl = container.id === 'validarResultados'
+    ? document.getElementById('resSections')
+    : document.getElementById('genResSections');
+
+  // ── Resumen global ────────────────────────────────────────────────
+  const totOk   = secciones.reduce((s,x) => s + (x.n_ok || 0), 0);
+  const totWarn = secciones.reduce((s,x) => s + (x.n_warn || 0), 0);
+  const totNone = secciones.reduce((s,x) => s + (x.n_sin_celda || 0), 0);
+
+  summaryEl.innerHTML = `
+    <div class="res-stat-box rsb-ok" data-filter="ok" onclick="filtrarValidacion('ok')"
+         title="Clic para filtrar solo valores correctos">
+      <div>
+        <div class="rsb-num">${totOk}</div>
+        <div class="rsb-lbl">Valores correctos</div>
+        <div class="rsb-hint">clic para filtrar</div>
+      </div>
+    </div>
+    <div class="res-stat-box rsb-warn" data-filter="warn" onclick="filtrarValidacion('warn')"
+         style="${totWarn===0?'opacity:.4':''}" title="Clic para ver solo diferencias">
+      <div>
+        <div class="rsb-num">${totWarn}</div>
+        <div class="rsb-lbl">Con diferencias</div>
+        <div class="rsb-hint">clic para filtrar</div>
+      </div>
+    </div>
+    <div class="res-stat-box rsb-none" data-filter="none" onclick="filtrarValidacion('none')"
+         style="${totNone===0?'opacity:.4':''}" title="Clic para ver sin celda Excel">
+      <div>
+        <div class="rsb-num">${totNone}</div>
+        <div class="rsb-lbl">Sin celda Excel</div>
+        <div class="rsb-hint">clic para filtrar</div>
+      </div>
+    </div>`;
+
+  // ── Secciones por compañía ────────────────────────────────────────
+  const cont = sectionsEl;
+  cont.innerHTML = '';
+
+  secciones.forEach((sec, si) => {
+    const estado = sec.estado || 'ok';
+    const badge  = estado === 'ok'
+      ? `<span class="rsh-badge ok">✓ ${sec.n_ok} correctos</span>`
+      : estado === 'warn'
+      ? `<span class="rsh-badge warn">⚠ ${sec.n_warn} diferencia(s)</span>`
+      : `<span class="rsh-badge sin_celda">${sec.n_sin_celda} sin celda</span>`;
+
+    const bodyId = `rsbody_${si}`;
+
+    // Filas KPI
+    const kpiRows = (sec.kpis || []).map(k => {
+      if (k.estado === 'sin_label') return ''; // omitir viñetas sin etiqueta
+      const icon = k.estado === 'ok' ? '<span style="color:var(--ok)">✓</span>'
+                 : k.estado === 'revisar' ? '<span style="color:var(--err)">✗</span>'
+                 : k.estado === 'sin_celda' ? '<span style="color:#CBD5E0">?</span>'
+                 : '';
+      const label = k.label
+        ? `<div class="kpi-label">${_esc(k.label)}</div>`
+        : `<div class="kpi-label" style="color:var(--gray-l);font-style:italic;">(viñeta)</div>`;
+
+      let valsHtml = '';
+      if (k.estado === 'sin_celda') {
+        valsHtml = `<div class="kpi-vals"><span style="color:#CBD5E0">sin celda Excel configurada</span></div>`;
+      } else if (k.valores && k.valores.length) {
+        const total = k.valores.length;
+        const partes = k.valores.map((v, i) => {
+          // Si hay 2 valores: 0=unidades, 1=porcentual. Si hay 1: es porcentual.
+          const lbl = (total === 2)
+            ? (i === 0 ? '<span class="kpi-val-lbl">unid.</span>' : '<span class="kpi-val-lbl">%</span>')
+            : '<span class="kpi-val-lbl">%</span>';
+          return v.ok
+            ? `<span class="kpi-val-ok">${lbl}Word ${_esc(v.word)} = Excel ${v.excel}</span>`
+            : `<span class="kpi-val-warn">${lbl}Word ${_esc(v.word)} ≠ Excel ${v.excel} <span style="opacity:.7">(dif ${v.dif})</span></span>`;
+        }).join('');
+        valsHtml = `<div class="kpi-vals">${partes}</div>`;
+      }
+
+      return `<div class="kpi-row ${k.estado}" data-estado="${k.estado}">
+        <div class="kpi-icon">${icon}</div>
+        <div>${label}${valsHtml}</div>
+        <div class="kpi-extra">${k.excel_label && k.excel_label !== k.label ? _esc(k.excel_label) : ''}</div>
+      </div>`;
+    }).join('');
+
+    const div = document.createElement('div');
+    div.className = 'res-section';
+    div.innerHTML = `
+      <div class="res-sec-header ${estado}" onclick="toggleSection('${bodyId}', this)">
+        <span class="rsh-name">${_esc(sec.clave)} — ${_esc(sec.nombre)}</span>
+        ${badge}
+        <span class="res-sec-arrow" id="arr_${bodyId}">▶</span>
+      </div>
+      <div class="res-sec-body ${estado === 'warn' ? 'open' : ''}" id="${bodyId}">
+        ${kpiRows || '<div style="padding:12px 16px;font-size:12px;color:var(--gray-l);">Sin líneas con valores numéricos</div>'}
+      </div>`;
+    cont.appendChild(div);
+  });
+}
+
+// Mapa: data-filter → data-estado en las filas KPI
+const _filterEstado = { ok: 'ok', warn: 'revisar', none: 'sin_celda' };
+
+function filtrarValidacion(tipo) {
+  // Toggle: mismo clic quita el filtro
+  activeFilter = (activeFilter === tipo) ? null : tipo;
+  const targetEstado = activeFilter ? _filterEstado[activeFilter] : null;
+  const scope = _kpiContainer || document;
+
+  // Actualizar estado visual de los cuadros (solo dentro del contenedor activo)
+  scope.querySelectorAll('.res-stat-box').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === activeFilter);
+  });
+
+  // Mostrar/ocultar filas KPI
+  scope.querySelectorAll('.kpi-row').forEach(row => {
+    row.style.display = (!targetEstado || row.dataset.estado === targetEstado) ? '' : 'none';
+  });
+
+  // Mostrar/ocultar secciones según si tienen filas visibles; auto-expandir las que sí
+  scope.querySelectorAll('.res-section').forEach(sec => {
+    if (!targetEstado) {
+      sec.style.display = '';
+      return;
+    }
+    const matches = sec.querySelectorAll(`.kpi-row[data-estado="${targetEstado}"]`);
+    sec.style.display = matches.length ? '' : 'none';
+    if (matches.length) {
+      const body = sec.querySelector('.res-sec-body');
+      const arr  = sec.querySelector('.res-sec-arrow');
+      if (body && !body.classList.contains('open')) {
+        body.classList.add('open');
+        if (arr) arr.textContent = '▼';
+      }
+    }
+  });
+}
+
+function toggleRutas() {
+  const body   = document.getElementById('rutasBody');
+  const header = document.getElementById('rutasHeader');
+  const arrow  = document.getElementById('rutasArrow');
+  const open   = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  header.classList.toggle('open', open);
+}
+
+function toggleSection(bodyId, header) {
+  const body = document.getElementById(bodyId);
+  const arr  = document.getElementById('arr_' + bodyId);
+  const open = body.classList.toggle('open');
+  arr.textContent = open ? '▼' : '▶';
+}
+
+function _esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modo Word nuevo / existente
+// ─────────────────────────────────────────────────────────────────────────────
+function getModoWord() {
+  const el = document.querySelector('input[name="modoWord"]:checked');
+  return el ? el.value : 'nuevo';
+}
+
+function onModoWordChange() {
+  const modo   = getModoWord();
+  const row    = document.getElementById('wordExistenteRow');
+  const lbl    = document.getElementById('btnGenerarLabel');
+  const titulo = document.getElementById('faenasTitulo');
+  if (modo === 'existente') {
+    row.style.display = '';
+    if (lbl)    lbl.textContent    = 'Actualizar Secciones';
+    if (titulo) titulo.textContent = '🏭 Secciones a actualizar';
+  } else {
+    row.style.display = 'none';
+    if (lbl)    lbl.textContent    = 'Generar Informe';
+    if (titulo) titulo.textContent = '🏭 Faenas a incluir';
+    fillInput('g_word_existente', '', null);
+  }
+  updateRutasVisibility();
+}
+
+
+
+async function browseWordExistente() {
+  try {
+    const r = await fetch('/api/browse-file', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Seleccionar Word existente', tipos: 'word' })
+    });
+    const j = await r.json();
+    if (j.path) {
+      fillInput('g_word_existente', j.path, true);
+    }
+  } catch(e) {
+    alert('No se pudo abrir el selector. ¿Está ejecutando server.py?');
+  }
+}
+
+function getFaenasActualizar() {
+  // Siempre usa los chips de #companies (renombrados según modo)
+  return getFaenas();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('year').value = new Date().getFullYear();
+  fetchCalendario();
+  onDiscoChange();
+  onModoWordChange();        // también llama updateRutasVisibility()
+});
+</script>
+</body>
+</html>
