@@ -302,6 +302,7 @@ def _generar(d):
     rutas = construir_rutas_semana(
         d["num_semana"], d["dia_inicio"], d["mes_inicio"],
         d["dia_fin"],    d["mes_fin"],    d["year"],
+        disco=d.get("disco") or None,
     )
 
     carpeta_destino = d.get("carpeta_destino", "").strip() or str(rutas["raiz"])

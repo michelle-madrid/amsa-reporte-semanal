@@ -1488,6 +1488,12 @@ async function lanzarGenerar() {
     return;
   }
 
+  // Incluir disco si el usuario eligió disco compartido
+  if (getDiscoMode() === 'si') {
+    const disco = getDiscoNombre();
+    if (disco) data.disco = disco;
+  }
+
   const payload = {
     ...data,
     faenas:              faenasSeleccionadas,
