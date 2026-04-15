@@ -267,10 +267,12 @@ def api_revisar_ortografia():
 # ── Wrapper de tarea ──────────────────────────────────────────────────────────
 def _task(fn, data):
     global _running
+    import pythoncom
+    pythoncom.CoInitialize()
     _running = True; _start_cap()
     try:    fn(data)
     except: print(f"\n[ERROR]\n{traceback.format_exc()}")
-    finally: _stop_cap(); _running = False
+    finally: _stop_cap(); _running = False; pythoncom.CoUninitialize()
 
 # ── Implementación: Generar ───────────────────────────────────────────────────
 _path_overrides: dict = {}
