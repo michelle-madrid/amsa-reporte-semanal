@@ -4,6 +4,7 @@ from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 from config import CONFIG_COMPANIAS
+from state import errores
 from utils.text_utils import limpiar_texto_global
 from utils.excel_utils import exportar_imagen_excel
 import os
