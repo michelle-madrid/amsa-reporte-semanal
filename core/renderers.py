@@ -964,6 +964,14 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
     p_img = doc.add_paragraph(style="Normal AMSA")
     p_img.paragraph_format.space_before = Pt(0)
     p_img.paragraph_format.space_after = Pt(12)
+  else:
+    import os as _os
+    ruta_cache_gh = _os.path.join(r"C:\Temp", "tabla_hidrica_mlp.png")
+    if _os.path.isfile(ruta_cache_gh):
+      agregar_imagen(doc, ruta_cache_gh, 19, 3.24, "")
+      p_img = doc.add_paragraph(style="Normal AMSA")
+      p_img.paragraph_format.space_before = Pt(0)
+      p_img.paragraph_format.space_after = Pt(12)
 
   patron_fechas = re.compile(
     r"\b(?:El día\s)?\d{1,2}\sde\s\w+\sde\s\d{4}(?:\s*-\s*\d{1,2}\sde\s\w+\sde\s\d{4})?\b",

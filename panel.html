@@ -707,7 +707,7 @@
 
       <div class="toggle-row">
         <label class="toggle">
-          <input type="checkbox" id="opt_vinculos">
+          <input type="checkbox" id="opt_vinculos" onchange="updateRutasVisibility()">
           <span class="toggle-slider"></span>
         </label>
         <span class="toggle-label">Actualizar vínculos del Excel antes de generar</span>
@@ -792,7 +792,7 @@
 
         <div class="card-subtitle">Informes Word por faena</div>
 
-        <div class="path-field" data-faena="MLP">
+        <div class="path-field" data-faena="MLP" data-tipo="word">
           <div class="pf-label">MLP — Los Pelambres</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -803,7 +803,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>01 -MLP\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CEN">
+        <div class="path-field" data-faena="CEN" data-tipo="word">
           <div class="pf-label">CEN — Centinela</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -814,7 +814,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>02 -CEN\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="ANT">
+        <div class="path-field" data-faena="ANT" data-tipo="word">
           <div class="pf-label">ANT — Antucoya</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -825,7 +825,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>03 -ANT\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CMZ">
+        <div class="path-field" data-faena="CMZ" data-tipo="word">
           <div class="pf-label">CMZ — Zaldívar</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -836,7 +836,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>04 -CMZ\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="FCAB">
+        <div class="path-field" data-faena="FCAB" data-tipo="word">
           <div class="pf-label">FCAB</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -850,7 +850,7 @@
 
         <div class="card-subtitle" style="margin-top:14px;">Excels por faena</div>
 
-        <div class="path-field" data-faena="MLP">
+        <div class="path-field" data-faena="MLP" data-tipo="excel">
           <div class="pf-label">MLP — Los Pelambres</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -861,7 +861,7 @@
             <span class="field-hint">Patrón: <code>mlp semana*.xlsx</code> (en subcarpeta <code>01 -MLP\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CEN">
+        <div class="path-field" data-faena="CEN" data-tipo="excel">
           <div class="pf-label">CEN — Centinela</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -872,7 +872,7 @@
             <span class="field-hint">Patrón: <code>informe semanal*.xlsx</code> (en subcarpeta <code>02 -CEN\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="ANT">
+        <div class="path-field" data-faena="ANT" data-tipo="excel">
           <div class="pf-label">ANT — Antucoya</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -883,7 +883,7 @@
             <span class="field-hint">Patrón: <code>informe semanal*.xlsx</code> (en subcarpeta <code>03 -ANT\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CMZ">
+        <div class="path-field" data-faena="CMZ" data-tipo="excel">
           <div class="pf-label">CMZ — Zaldívar</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -894,7 +894,7 @@
             <span class="field-hint">Patrón: <code>proyectado*.xlsx</code> (en subcarpeta <code>04 -CMZ\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="FCAB">
+        <div class="path-field" data-faena="FCAB" data-tipo="excel">
           <div class="pf-label">FCAB</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -1153,13 +1153,18 @@ function getFaenas() {
 
 // Muestra/oculta las filas de rutas según las faenas activas y la info disponible.
 function updateRutasVisibility() {
-  const activas = new Set(getFaenasActualizar());
-  const ssoOk   = document.getElementById('opt_sso') ? document.getElementById('opt_sso').checked : true;
-  const ghOk    = document.getElementById('opt_gh')  ? document.getElementById('opt_gh').checked  : true;
+  const activas  = new Set(getFaenasActualizar());
+  const vinculos = document.getElementById('opt_vinculos') ? document.getElementById('opt_vinculos').checked : false;
+  const ssoOk    = document.getElementById('opt_sso') ? document.getElementById('opt_sso').checked : true;
+  const ghOk     = document.getElementById('opt_gh')  ? document.getElementById('opt_gh').checked  : true;
 
-  // Filas por faena
-  document.querySelectorAll('#rutasBody .path-field[data-faena]').forEach(row => {
+  // Informes Word por faena: solo si la faena está seleccionada
+  document.querySelectorAll('#rutasBody .path-field[data-tipo="word"]').forEach(row => {
     row.style.display = activas.has(row.dataset.faena) ? '' : 'none';
+  });
+  // Excels por faena: si la faena está seleccionada O si se va a actualizar vínculos (todos)
+  document.querySelectorAll('#rutasBody .path-field[data-tipo="excel"]').forEach(row => {
+    row.style.display = (activas.has(row.dataset.faena) || vinculos) ? '' : 'none';
   });
   // Filas SSO (Excel indicadores + Excel SSO)
   document.querySelectorAll('#rutasBody .path-field[data-seccion="sso"]').forEach(row => {
@@ -1486,6 +1491,23 @@ async function lanzarGenerar() {
   if (modo === 'existente' && faenasSeleccionadas.length === 0) {
     alert('Selecciona al menos una sección a actualizar.');
     return;
+  }
+
+  // ── Advertencia si alguna sección seleccionada ya tiene datos en el Word ──
+  if (modo === 'existente' && _seccionesConDatos.length > 0) {
+    const incluyeSSO = document.getElementById('opt_sso') && document.getElementById('opt_sso').checked;
+    const incluyeGH  = document.getElementById('opt_gh')  && document.getElementById('opt_gh').checked;
+    const seleccionadas = [...faenasSeleccionadas];
+    if (incluyeSSO) seleccionadas.push('SSO');
+    if (incluyeGH)  seleccionadas.push('GH');
+    const conDatosSeleccionadas = seleccionadas.filter(s => _seccionesConDatos.includes(s));
+    if (conDatosSeleccionadas.length > 0) {
+      const lista = conDatosSeleccionadas.join(', ');
+      const ok = confirm(
+        `Las siguientes secciones ya tienen información en el Word existente:\n\n  ${lista}\n\n¿Seguro que deseas sobreescribirlas?`
+      );
+      if (!ok) return;
+    }
   }
 
   // Incluir disco si el usuario eligió disco compartido
@@ -2098,6 +2120,21 @@ function onModoWordChange() {
 
 
 
+let _seccionesConDatos = [];   // secciones del Word existente que ya tienen datos
+
+async function _cargarSeccionesWordExistente(ruta) {
+  try {
+    const r = await fetch('/api/word-secciones', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruta })
+    });
+    const j = await r.json();
+    _seccionesConDatos = j.con_datos || [];
+  } catch(e) {
+    _seccionesConDatos = [];
+  }
+}
+
 async function browseWordExistente() {
   try {
     const r = await fetch('/api/browse-file', {
@@ -2107,6 +2144,7 @@ async function browseWordExistente() {
     const j = await r.json();
     if (j.path) {
       fillInput('g_word_existente', j.path, true);
+      await _cargarSeccionesWordExistente(j.path);
     }
   } catch(e) {
     alert('No se pudo abrir el selector. ¿Está ejecutando server.py?');

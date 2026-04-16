@@ -235,6 +235,61 @@ def api_calendario():
     except Exception as e:
         return jsonify({"error": str(e), "semanas": {}})
 
+# ── Word secciones con datos ──────────────────────────────────────────────────
+@app.route("/api/word-secciones", methods=["POST"])
+def api_word_secciones():
+    """
+    Lee un Word existente y devuelve qué secciones tienen datos reales
+    (vs. el texto '[No solicitado...]').  Usado para advertir antes de sobreescribir.
+    """
+    ruta = request.json.get("ruta", "")
+    if not ruta or not Path(ruta).is_file():
+        return jsonify({"con_datos": []})
+    try:
+        from docx import Document
+        from config import CONFIG_COMPANIAS
+
+        _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
+        MSG  = "[No solicitado. Presumiblemente en espera de envío información]"
+        SECCION_BACKUP = "Accidentabilidad Back-up"
+        SECCION_SSO    = "Accidentabilidad"
+        SECCION_GH     = "Gestión Hídrica"
+
+        doc = Document(ruta)
+        encontradas = {}   # clave → True/False (True = tiene datos)
+        clave_actual = None
+        buf = []
+
+        def _flush():
+            nonlocal buf
+            if clave_actual is None:
+                buf = []; return
+            contenido = "\n".join(buf)
+            # buf vacío = sólo imágenes pegadas → sección con datos
+            encontradas[clave_actual] = (not buf) or (MSG not in contenido)
+            buf = []
+
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            if not t:
+                continue
+            if t == SECCION_BACKUP:
+                _flush(); clave_actual = None
+            elif t == SECCION_SSO:
+                _flush(); clave_actual = "SSO"
+            elif t == SECCION_GH:
+                _flush(); clave_actual = "GH"
+            elif t in _N2K:
+                _flush(); clave_actual = _N2K[t]
+            elif clave_actual:
+                buf.append(t)
+        _flush()
+
+        con_datos = [k for k, v in encontradas.items() if v]
+        return jsonify({"con_datos": con_datos})
+    except Exception as e:
+        return jsonify({"con_datos": [], "error": str(e)})
+
 # ── Generar ───────────────────────────────────────────────────────────────────
 @app.route("/api/generar", methods=["POST"])
 def api_generar():
@@ -360,23 +415,24 @@ def _generar(d):
                 return
 
             m.actualizar_secciones_word(
-                ruta_existente      = word_existente,
-                faenas_actualizar   = faenas,
-                dia_inicio          = d["dia_inicio"],
-                mes_inicio          = d["mes_inicio"],
-                dia_fin             = d["dia_fin"],
-                mes_fin             = d["mes_fin"],
-                year                = d["year"],
-                num_semana          = d["num_semana"],
-                excel_madre         = excel_madre,
-                excel_indicadores   = excel_ind,
-                carpeta_destino     = carpeta_destino,
-                nombre_override     = nombre_custom,
-                actualizar_vinculos = d.get("actualizar_vinculos", False),
-                informes_paths      = informes_paths,
-                incluir_sso         = d.get("incluir_sso", True),
-                incluir_gh          = d.get("incluir_gh",  True),
-                disco               = d.get("disco") or None,
+                ruta_existente        = word_existente,
+                faenas_actualizar     = faenas,
+                dia_inicio            = d["dia_inicio"],
+                mes_inicio            = d["mes_inicio"],
+                dia_fin               = d["dia_fin"],
+                mes_fin               = d["mes_fin"],
+                year                  = d["year"],
+                num_semana            = d["num_semana"],
+                excel_madre           = excel_madre,
+                excel_indicadores     = excel_ind,
+                carpeta_destino       = carpeta_destino,
+                nombre_override       = nombre_custom,
+                actualizar_vinculos   = d.get("actualizar_vinculos", False),
+                informes_paths        = informes_paths,
+                excels_dirs_override  = {k: v for k, v in d.get("excels_faena", {}).items() if v},
+                incluir_sso           = d.get("incluir_sso", True),
+                incluir_gh            = d.get("incluir_gh",  True),
+                disco                 = d.get("disco") or None,
             )
         else:
             # ── Modo Word nuevo: generación completa (comportamiento original) ──
@@ -435,7 +491,7 @@ def _verificar_documento(ruta_docx):
     #    Se excluyen separadores de miles (\d{3} tras la coma)
     coma_dec = re.findall(r'\b\d+,\d{1,2}\b(?!\d)', texto)
     if coma_dec:
-        muestra = ", ".join(dict.fromkeys(coma_dec)[:5])
+        muestra = ", ".join(list(dict.fromkeys(coma_dec))[:5])
         print(f"  [REVISAR] Coma usada como decimal (usar punto): {muestra}")
     else:
         print("  ✓ Decimales: no se detectaron comas como separador decimal")

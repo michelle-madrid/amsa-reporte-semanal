@@ -109,7 +109,7 @@ def clasificar_subtitulo_cmz_planta(texto):
   if "remanejo ripios" in t:
     return "Remanejo Ripios"
 
-  if t == "pls" or t.startswith("pls ") or " pls " in f" {t} ":
+  if re.match(r'^pls\b', t):
     return "PLS"
 
   if "cobre fino producido" in t:

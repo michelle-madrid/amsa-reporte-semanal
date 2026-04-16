@@ -13,6 +13,35 @@ from PIL import ImageGrab
 import state
 from config import SSO_MARCADOR_TABLA
 
+# ── Helpers COM robustos ──────────────────────────────────────────────────────
+# ws_com.Cells(r, c) puede fallar con AttributeError: __call__.Value cuando
+# Excel fue creado con DispatchEx (late binding estricto). Los helpers
+# _cv y _cr usan Range con notación A1 como fallback.
+
+def _cv(ws, row, col):
+    """Lee el valor de la celda (row, col) de forma compatible con DispatchEx."""
+    try:
+        return ws.Cells(row, col).Value
+    except AttributeError:
+        return ws.Range(f"{get_column_letter(col)}{row}").Value
+
+def _cr(ws, row, col):
+    """Devuelve el Range de una celda para usar como clave en Sort u otros métodos COM."""
+    try:
+        c = ws.Cells(row, col)
+        # verificar que es un Range válido, no un dispatch huérfano
+        _ = c.Address
+        return c
+    except (AttributeError, Exception):
+        return ws.Range(f"{get_column_letter(col)}{row}")
+
+def _set_row_hidden(ws, row, hidden):
+    """Oculta o muestra una fila de forma compatible con DispatchEx."""
+    try:
+        ws.Rows(row).Hidden = hidden
+    except (AttributeError, Exception):
+        ws.Range(f"{row}:{row}").Hidden = hidden
+
 # Crea una ventana raíz oculta para usar los diálogos de selección sin mostrar una ventana principal.
 def _crear_root_oculto():
     root = tk.Tk()
@@ -43,6 +72,14 @@ def seleccionar_carpeta():
 
 # Obtiene o crea una instancia reutilizable de Excel por COM.
 def _obtener_excel_app():
+    # Si existe un proxy, verificar que sigue conectado; si no, descartarlo.
+    if state._excel_app is not None:
+        try:
+            _ = state._excel_app.Workbooks.Count
+        except Exception:
+            state._excel_app = None
+            state._workbooks_abiertos.clear()
+
     if state._excel_app is None:
         for intento in range(5):
             try:
@@ -148,7 +185,7 @@ def _fila_tiene_contenido_util(row_vals):
 def _ultima_fila_con_datos_en_rango_com(ws_com, min_col, min_row, max_col, max_row):
     """Usa la hoja ya abierta en Excel (COM) para no bloquear el archivo con otro lector."""
     for r in range(max_row, min_row - 1, -1):
-        vals = [ws_com.Cells(r, c).Value for c in range(min_col, max_col + 1)]
+        vals = [_cv(ws_com, r, c) for c in range(min_col, max_col + 1)]
         if _fila_tiene_contenido_util(vals):
             return r
     return min_row
@@ -158,7 +195,7 @@ def _ultima_fila_con_datos_en_rango_com(ws_com, min_col, min_row, max_col, max_r
 def _columna_izquierda_tabla_sso(ws_com, fila_encabezado, max_col_limit=40):
     """Primera columna con texto en la fila de encabezado (por si hay celdas combinadas)."""
     for c in range(1, max_col_limit + 1):
-        v = ws_com.Cells(fila_encabezado, c).Value
+        v = _cv(ws_com, fila_encabezado, c)
         if v is not None and str(v).strip() != "":
             return c
     return 1
@@ -168,7 +205,7 @@ def _ultima_columna_cabecera_sso(ws_com, fila_encabezado, max_col_limit=40):
     """Última columna con texto en la fila del encabezado de la tabla."""
     last = 1
     for c in range(1, max_col_limit + 1):
-        v = ws_com.Cells(fila_encabezado, c).Value
+        v = _cv(ws_com, fila_encabezado, c)
         if v is not None and str(v).strip() != "":
             last = c
     return max(last, 1)
@@ -184,7 +221,7 @@ def _filas_encabezado_tablas_sso(ws_com, marcador=SSO_MARCADOR_TABLA):
     filas = []
     for r in range(1, max_r + 1):
         for c in range(1, 21):
-            v = ws_com.Cells(r, c).Value
+            v = _cv(ws_com, r, c)
             if v is None:
                 continue
             if marcador in str(v).strip().lower():
@@ -201,7 +238,7 @@ def _tabla_sso_tiene_datos(ws_com, h_row, last_row, min_c, last_c):
     """Busca la columna 'Id del incidente' y omite la tabla si todos los IDs son 0 o None."""
     col_id = None
     for c in range(min_c, last_c + 1):
-        v = ws_com.Cells(h_row, c).Value
+        v = _cv(ws_com, h_row, c)
         if v is not None and SSO_MARCADOR_TABLA in str(v).strip().lower():
             col_id = c
             break
@@ -210,7 +247,7 @@ def _tabla_sso_tiene_datos(ws_com, h_row, last_row, min_c, last_c):
         return True  # No encontramos la columna, incluir por precaución
 
     for r in range(h_row + 1, last_row + 1):
-        v = ws_com.Cells(r, col_id).Value
+        v = _cv(ws_com, r, col_id)
         if v is not None and v != 0:
             return True
 
@@ -278,7 +315,7 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
     # Buscar columna "Id del incidente"
     col_id = None
     for c in range(col_ini, col_fin + 1):
-        v = ws_com.Cells(row_ini, c).Value
+        v = _cv(ws_com, row_ini, c)
         if v is not None and SSO_MARCADOR_TABLA in str(v).strip().lower():
             col_id = c
             break
@@ -287,9 +324,9 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
     filas_ocultas = []
     if col_id:
         for r in range(row_ini + 1, row_fin + 1):
-            v = ws_com.Cells(r, col_id).Value
+            v = _cv(ws_com, r, col_id)
             if v is None or v == 0:
-                ws_com.Rows(r).Hidden = True
+                _set_row_hidden(ws_com, r, True)
                 filas_ocultas.append(r)
 
     # Exportar via portapapeles (mapa de bits) para máxima calidad de imagen.
@@ -311,7 +348,7 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
 
     # Restaurar filas ocultas
     for r in filas_ocultas:
-        ws_com.Rows(r).Hidden = False
+        _set_row_hidden(ws_com, r, False)
 
     return imagen_salida
 
@@ -426,7 +463,7 @@ def _ordenar_hoja_sso(wb):
             col_id = None
             col_fecha = None
             for c in range(min_c, last_c + 1):
-                v = ws.Cells(h_row, c).Value
+                v = _cv(ws, h_row, c)
                 if not v:
                     continue
                 v_low = str(v).strip().lower()
@@ -436,17 +473,17 @@ def _ordenar_hoja_sso(wb):
                     col_fecha = c
             if not col_id and not col_fecha:
                 continue
-            data_range = ws.Range(ws.Cells(h_row, min_c), ws.Cells(last_row, last_c))
+            data_range = ws.Range(_cr(ws, h_row, min_c), _cr(ws, last_row, last_c))
             if col_id and col_fecha:
                 data_range.Sort(
-                    Key1=ws.Cells(h_row, col_id),    Order1=1,
-                    Key2=ws.Cells(h_row, col_fecha),  Order2=1,
+                    Key1=_cr(ws, h_row, col_id),    Order1=1,
+                    Key2=_cr(ws, h_row, col_fecha),  Order2=1,
                     Header=1, Orientation=1,
                 )
             elif col_id:
-                data_range.Sort(Key1=ws.Cells(h_row, col_id), Order1=1, Header=1, Orientation=1)
+                data_range.Sort(Key1=_cr(ws, h_row, col_id), Order1=1, Header=1, Orientation=1)
             else:
-                data_range.Sort(Key1=ws.Cells(h_row, col_fecha), Order1=1, Header=1, Orientation=1)
+                data_range.Sort(Key1=_cr(ws, h_row, col_fecha), Order1=1, Header=1, Orientation=1)
             tablas_ordenadas += 1
         print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
     except Exception as e:
@@ -520,15 +557,19 @@ def _cerrar_wb_por_nombre(excel_app, ruta_objetivo, limpiar_cache=False):
         pass
 
 
-def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False):
+def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False, guardar_en_lugar=False):
     """
-    Actualiza vínculos y guarda una copia _act en carpeta_destino.
-    Usa el Excel del usuario si está abierto (para tener datos ya calculados),
-    o DispatchEx si no está abierto.
+    Actualiza vínculos del Excel madre.
+    - guardar_en_lugar=True  → sobreescribe el archivo actual con wb.Save() (modo Word existente).
+    - guardar_en_lugar=False → guarda una copia _act en carpeta_destino (modo generación nueva).
+    Usa el Excel del usuario si está abierto, o DispatchEx si no lo está.
     """
     try:
-        nombre_base = os.path.splitext(os.path.basename(ruta_excel))[0]
-        ruta_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx") if carpeta_destino else None
+        if guardar_en_lugar:
+            ruta_act = None
+        else:
+            nombre_base = os.path.splitext(os.path.basename(ruta_excel))[0]
+            ruta_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx") if carpeta_destino else None
 
         # Intentar primero con el Excel del usuario (evita problemas de read-only).
         # Hacerlo ANTES de _obtener_excel_app() para que Dispatch encuentre
@@ -550,10 +591,15 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
                 time.sleep(2)
             except Exception as e:
                 print(f"  ! No se pudo recalcular: {e}")
-            if ruta_act:
-                # Pausa breve para que el COM cross-proceso se estabilice tras el refresco
-                time.sleep(1)
-                # Cerrar _act si ya está abierto en la instancia del usuario
+            # Pausa breve para que el COM cross-proceso se estabilice tras el refresco
+            time.sleep(1)
+            if guardar_en_lugar:
+                try:
+                    wb_usuario.Save()
+                    print(f"  ✓ Excel guardado (sobreescrito): {os.path.basename(ruta_excel)}")
+                except Exception as e:
+                    print(f"  ! No se pudo guardar: {e}")
+            elif ruta_act:
                 _cerrar_wb_por_nombre(excel_usuario, ruta_act)
                 try:
                     wb_usuario.SaveCopyAs(ruta_act)
@@ -580,7 +626,13 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
             time.sleep(2)
         except Exception as e:
             print(f"  ! No se pudo recalcular: {e}")
-        if ruta_act:
+        if guardar_en_lugar:
+            try:
+                wb.Save()
+                print(f"  ✓ Excel guardado (sobreescrito): {os.path.basename(ruta_excel)}")
+            except Exception as e:
+                print(f"  ! No se pudo guardar: {e}")
+        elif ruta_act:
             # Cerrar _act si ya está abierto en nuestra instancia DispatchEx
             _cerrar_wb_por_nombre(excel, ruta_act, limpiar_cache=True)
             try:

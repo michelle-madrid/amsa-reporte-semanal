@@ -598,7 +598,7 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         if label_word:
             label_norm = _norm(label_word)
             # Verificar si el KPI está explícitamente excluido de validación
-            if label_norm in excluidos:
+            if any(e in label_norm for e in excluidos):
                 print(f"      ↳ Excluido de validación")
                 continue
             if re.match(r'^acumulado al mes', label_norm):

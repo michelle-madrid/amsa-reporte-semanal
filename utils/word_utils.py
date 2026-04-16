@@ -470,11 +470,20 @@ def agregar_viñeta_full_bold(doc, texto, nivel=1, espacio_despues=6):
 
 # Inserta la tabla de producción semanal de una faena como imagen.
 def agregar_produccion_semana_faena(doc, clave, excel_madre):
-  if not excel_madre:
-    return
-
+  import os as _os
   cfg = CONFIG_COMPANIAS.get(clave)
   if not cfg:
+    return
+
+  if not excel_madre:
+    # Sección no seleccionada: usar imagen cacheada si existe
+    ruta_cache = _os.path.join(r"C:\Temp", f"tabla_{clave}.png")
+    if not _os.path.isfile(ruta_cache):
+      return
+    agregar_titulo(doc, "Producción Semana", nivel=2)
+    agregar_imagen(doc, ruta_cache, 19, 19.3 if clave == "CEN" else None, "")
+    if clave == "CEN":
+      doc.add_page_break()
     return
 
   agregar_titulo(doc, "Producción Semana", nivel=2)
@@ -490,6 +499,5 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
 
   agregar_imagen(doc, img_tabla, 19, alto_imagen, "")
 
-  # 🔥 ESTE ES EL CAMBIO
   if clave == "CEN":
     doc.add_page_break()

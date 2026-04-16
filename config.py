@@ -292,8 +292,8 @@ CONFIG_KPI_EXCLUIDOS = {
     "ANT": {"Palas", "Cargador Frontal"},
     "CEN": {"Fase", "Remanejo"},
     "MLP": {
-        "En Planta Desaladora el flujo promedio durante la semana fue de",
-        "En términos de capacidad de impulsión nos encontramos con capacidad de impulsión de",
+        "En Planta Desaladora",
+        "En términos de capacidad de impulsión",
         "Agua Continental Consumida",
         "Recirculación Mauro a Planta",
         "Intensidad de Uso de Agua en Planta",

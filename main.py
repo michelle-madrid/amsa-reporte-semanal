@@ -22,6 +22,93 @@ from core.validador import validar_kpis_vs_excel
 # ─────────────────────────────────────────────────────────────────────────────
 _MSG_PENDIENTE = "[No solicitado. Presumiblemente en espera de envío información]"
 
+# Nombres canónicos de imagen según sección e índice dentro de ella
+_TEMP = r"C:\Temp"
+_SECCION_GH     = "Gestión Hídrica"
+_SECCION_SSO    = "Accidentabilidad"
+_SECCION_BACKUP = "Accidentabilidad Back-up"
+
+def _nombre_imagen_canonical(seccion, idx):
+    """Dado el nombre de sección y el índice de imagen dentro de ella,
+    retorna el nombre de archivo PNG que usa _cache() en _construir_doc."""
+    if seccion is None:
+        return "tabla_principal.png" if idx == 0 else None
+    if seccion == _SECCION_GH:
+        return "gestion_hidrica.png" if idx == 0 else None
+    if seccion == _SECCION_SSO:
+        nombres = ["valor_semanal.png", "valor_mensual.png", "valor_anual.png"]
+        return nombres[idx] if idx < len(nombres) else None
+    if seccion == _SECCION_BACKUP:
+        return f"accidentabilidad_{idx + 1}.png"
+    # Es clave de faena (MLP, CEN, ANT, CMZ, FCAB)
+    if seccion == "MLP" and idx == 1:
+        return "tabla_hidrica_mlp.png"
+    return f"tabla_{seccion}.png" if idx == 0 else None
+
+
+def _extraer_imagenes_a_temp(ruta_word):
+    """
+    Extrae TODAS las imágenes del Word existente y las guarda en C:\\Temp\\
+    con los nombres canónicos usados por _cache() en _construir_doc.
+    Las imágenes de secciones seleccionadas serán sobreescritas luego por
+    los exportadores de Excel; las no seleccionadas quedan intactas.
+    Retorna el número de imágenes extraídas.
+    """
+    os.makedirs(_TEMP, exist_ok=True)
+
+    _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
+
+    ns_a = "http://schemas.openxmlformats.org/drawingml/2006/main"
+    ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+    doc = Document(ruta_word)
+    seccion_actual = None   # None = preámbulo (antes de cualquier sección)
+    idx_en_seccion = 0
+    total = 0
+
+    for para in doc.paragraphs:
+        texto = para.text.strip()
+
+        # ── Detectar cambio de sección ──────────────────────────────────────
+        if texto:
+            # Orden importa: "Accidentabilidad Back-up" antes que "Accidentabilidad"
+            nueva_seccion = None
+            if texto == _SECCION_BACKUP:
+                nueva_seccion = _SECCION_BACKUP
+            elif texto == _SECCION_SSO:
+                nueva_seccion = _SECCION_SSO
+            elif texto == _SECCION_GH:
+                nueva_seccion = _SECCION_GH
+            elif texto in _N2K:
+                nueva_seccion = _N2K[texto]
+
+            if nueva_seccion is not None and nueva_seccion != seccion_actual:
+                seccion_actual = nueva_seccion
+                idx_en_seccion = 0
+
+        # ── Extraer imágenes de este párrafo ────────────────────────────────
+        blips = para._p.findall(f".//{{{ns_a}}}blip")
+        for blip in blips:
+            rid = blip.get(f"{{{ns_r}}}embed")
+            if not rid:
+                continue
+            try:
+                img_part = doc.part.related_parts[rid]
+                img_bytes = img_part.blob
+            except (KeyError, Exception):
+                continue
+
+            nombre = _nombre_imagen_canonical(seccion_actual, idx_en_seccion)
+            if nombre:
+                ruta_destino = os.path.join(_TEMP, nombre)
+                with open(ruta_destino, "wb") as f:
+                    f.write(img_bytes)
+                idx_en_seccion += 1
+                total += 1
+
+    print(f"  → {total} imagen(es) extraída(s) del Word existente a {_TEMP}")
+    return total
+
 def _construir_doc(
     informes,            # dict clave→texto_compania (para TODAS las faenas)
     excel_madre,
@@ -81,7 +168,7 @@ def _construir_doc(
             if linea_limpia.endswith("."):
                 doc.add_paragraph()
 
-    for _ in range(4):
+    for _ in range(3):
         doc.add_paragraph()
 
     img_resumen = exportar_imagen_excel(excel_madre, "Grupo Minero FCAB PLAN", "A3:X34", "tabla_principal.png")
@@ -90,11 +177,23 @@ def _construir_doc(
     if INCLUIR_ESTADO_FASES_DESARROLLO:
         agregar_estado_fases_desarrollo(doc, excel_madre)
 
+    es_parcial = faenas_con_excel is not None
+
+    def _cache(nombre):
+        """Devuelve la ruta del PNG cacheado si existe, o None."""
+        ruta = os.path.join(r"C:\Temp", nombre)
+        return ruta if os.path.isfile(ruta) else None
+
     doc.add_page_break()
     agregar_titulo(doc, "Gestión Hídrica", nivel=2)
     if incluir_gh:
         img_hidrica = exportar_imagen_excel(excel_madre, "Gestión Hídrica", "A3:W20", "gestion_hidrica.png")
         agregar_imagen(doc, img_hidrica, 19, 3.24, "")
+    elif es_parcial:
+        img_c = _cache("gestion_hidrica.png")
+        if img_c:
+            agregar_imagen(doc, img_c, 19, 3.24, "")
+            print("  → Gestión Hídrica: usando imagen previa (no solicitada)")
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Gestión Hídrica: En espera de envío información")
@@ -119,6 +218,24 @@ def _construir_doc(
             doc.add_paragraph()
             agregar_imagen(doc, img_path, 19, 4.3)
             doc.add_paragraph()
+    elif es_parcial:
+        for nombre_img, texto_titulo in [
+            ("valor_semanal.png", "Indicadores Valor Semanal"),
+            ("valor_mensual.png", "Indicadores Valor Mensual"),
+            ("valor_anual.png",   "Indicadores Valor Anual"),
+        ]:
+            img_c = _cache(nombre_img)
+            if img_c:
+                p_titulo = doc.add_paragraph()
+                p_titulo.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                run = p_titulo.add_run(texto_titulo)
+                run.bold = False
+                run.font.name = "Arial"
+                run.font.size = Pt(11)
+                doc.add_paragraph()
+                agregar_imagen(doc, img_c, 19, 4.3)
+                doc.add_paragraph()
+        print("  → Accidentabilidad: usando imágenes previas (no solicitada)")
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Accidentabilidad (SSO): En espera de envío información")
@@ -169,6 +286,18 @@ def _construir_doc(
             agregar_imagen(doc, img_backup, 19, None, "")
         if rangos_tablas_sso:
             print(f"  ✓ Accidentabilidad Back-up: {len(rangos_tablas_sso)} tabla(s) exportada(s)")
+    elif es_parcial:
+        i = 1
+        while True:
+            img_c = _cache(f"accidentabilidad_{i}.png")
+            if not img_c:
+                break
+            if i > 1:
+                doc.add_page_break()
+            agregar_imagen(doc, img_c, 19, None, "")
+            i += 1
+        if i > 1:
+            print(f"  → Accidentabilidad Back-up: usando {i - 1} imagen(es) previa(s) (no solicitada)")
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Accidentabilidad Back-up (SSO): En espera de envío información")
@@ -191,7 +320,8 @@ def actualizar_secciones_word(
     dia_inicio, mes_inicio, dia_fin, mes_fin, year, num_semana,
     excel_madre, excel_indicadores, carpeta_destino,
     nombre_override=None, actualizar_vinculos=False,
-    informes_paths=None,   # dict clave → ruta del Word fuente de cada faena a actualizar
+    informes_paths=None,        # dict clave → ruta del Word fuente de cada faena a actualizar
+    excels_dirs_override=None,  # dict clave → directorio/archivo Excel para sobrescribir auto-detección
     incluir_sso=True,
     incluir_gh=True,
     disco=None,
@@ -199,13 +329,19 @@ def actualizar_secciones_word(
     """
     Carga un Word existente y regenera solo las secciones de las faenas indicadas.
     Las secciones no seleccionadas se extraen del Word existente y se re-procesan.
+    Cuando actualizar_vinculos=True se actualizan los vínculos de TODAS las faenas.
     """
     if not Path(ruta_existente).is_file():
         print(f"[ERROR] Word existente no encontrado: {ruta_existente}")
         return
 
     print(f"\n── Modo Word existente: {Path(ruta_existente).name}")
-    print(f"  Secciones a actualizar: {', '.join(faenas_actualizar)}")
+    _secciones_display = list(faenas_actualizar)
+    if incluir_sso:
+        _secciones_display.append("SSO")
+    if incluir_gh:
+        _secciones_display.append("Gestión Hídrica")
+    print(f"  Secciones a actualizar: {', '.join(_secciones_display)}")
 
     # ── Extraer textos del Word existente ─────────────────────────────
     _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
@@ -228,8 +364,11 @@ def actualizar_secciones_word(
             buf.append(t)
     _save_buf()
 
-    if informes_previos:
-        print(f"  Secciones detectadas en Word previo: {', '.join(informes_previos)}")
+    con_datos = [k for k, v in informes_previos.items() if _MSG_PENDIENTE not in v]
+    if con_datos:
+        print(f"  Secciones detectadas en Word previo: {', '.join(con_datos)}")
+    elif informes_previos:
+        print(f"  ⚠ Word previo detectado pero todas las secciones están pendientes")
     else:
         print(f"  ⚠ No se detectaron secciones de compañía en el Word existente")
 
@@ -253,21 +392,29 @@ def actualizar_secciones_word(
             if informes[clave]:
                 print(f"  → {clave}: mantenido del Word existente")
 
-    # ── Actualizar vínculos Excel solo para las faenas seleccionadas ──
+    # ── Actualizar vínculos Excel — TODAS las faenas ──────────────────
     if actualizar_vinculos:
         rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
-        dirs_parcial = {k: v for k, v in rutas["informes_dirs"].items()
-                        if k in faenas_actualizar}
-        if dirs_parcial:
+        # Empezar con todos los dirs auto-detectados (no solo los seleccionados)
+        dirs_vinculos = dict(rutas["informes_dirs"])
+        # Aplicar overrides del usuario: si proporcionó un archivo, tomar su carpeta padre;
+        # si proporcionó una carpeta, usarla directamente.
+        for clave, ruta_override in (excels_dirs_override or {}).items():
+            if not ruta_override:
+                continue
+            p = Path(ruta_override)
+            dirs_vinculos[clave] = str(p.parent) if p.is_file() else str(p)
+        if dirs_vinculos:
             abrir_excel_y_actualizar_vinculos(
-                excel_madre, dirs_parcial, carpeta_destino=carpeta_destino,
-                ordenar_sso="SSO" in faenas_actualizar,
+                excel_madre, dirs_vinculos, carpeta_destino=carpeta_destino,
+                ordenar_sso=True,   # siempre ordenar SSO cuando se actualizan todos
+                guardar_en_lugar=True,
             )
-        nombre_base = os.path.splitext(os.path.basename(excel_madre))[0]
-        excel_madre_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx")
-        if os.path.exists(excel_madre_act):
-            print(f"  Usando Excel actualizado: {os.path.basename(excel_madre_act)}")
-            excel_madre = excel_madre_act
+
+    # ── Extraer imágenes del Word existente → C:\Temp\ con nombres canónicos ─
+    # Las secciones NO seleccionadas usarán estas imágenes; las seleccionadas
+    # las sobreescribirán con los exportados frescos de Excel.
+    _extraer_imagenes_a_temp(ruta_existente)
 
     nombre_final = nombre_override or os.path.splitext(os.path.basename(ruta_existente))[0]
     _construir_doc(
@@ -382,10 +529,13 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True, dis
             )
 
         if os.path.exists(excel_madre_act):
-            print(f"  Usando Excel actualizado: {os.path.basename(excel_madre_act)}")
-            excel_madre = excel_madre_act
+            print(f"  ✓ Copia guardada: {os.path.basename(excel_madre_act)}")
         else:
-            print("  ! No se encontró archivo _act, usando Excel original.")
+            print("  ! No se creó copia _act.")
+        # Seguimos usando el excel_madre ORIGINAL: su workbook está abierto en
+        # _workbooks_abiertos con los vínculos ya actualizados en memoria.
+        # Abrir la copia _act con UpdateLinks=0 desde una carpeta diferente
+        # rompe las rutas relativas y provoca #REF al guardar.
     else:
         informes_dirs = None
 
