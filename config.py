@@ -132,8 +132,8 @@ CONFIG_CELDAS_DESVIACIONES = {
         "Cu Fino Producido":        ("E48", "G48"),
         "Concentrado Producido":    ("E49", "G49"),
         "Concentrado Filtrado":     ("E50", "G50"),
-        "Cu Fino Pagable Filtrado": ("E51", "G51"),
-        "Molibdeno fino pagable":   ("E52", "G52"),
+        "Cu Fino Filtrado Pagable": ("E51", "G51"),
+        "Molibdeno":               ("E52", "G52"),
         "Arenas Depositadas":       ("E53", "G53"),
         "Arenas Compactadas":       ("E54", "G54"),
     },
@@ -151,7 +151,7 @@ CONFIG_CELDAS_DESVIACIONES = {
         "Mineral Apilado":              ("D68", "F68"),
         "Mineral Beneficiado":          ("D69", "F69"),
         "Ley Cu":                       ("D70", "F70"),
-        "Recuperación Cu Beneficiado":  ("D71", "F71"),
+        "Recuperación Cu":              ("D71", "F71"),
         "Descarga de Ripios":           ("D72", "F72"),
         "Cobre Fino Producido":         ("D73", "F73"),
     },
@@ -169,12 +169,24 @@ CONFIG_CELDAS_DESVIACIONES = {
         "Recuperación Cu":                          ("D114", "F114"),
         "Cu Fino Producido":                        ("D115", "F115"),
         "Concentrado Filtrado":                     ("D116", "F116"),
-        "Cu Fino Pagable Filtrada":                 ("D117", "F117"),
+        "Cu Fino Pagable Filtrado":                 ("D117", "F117"),
+        "Ley Au":                                   ("F118", "F118"),
         "Recuperación Au":                          ("D119", "F119"),
-        "Au Fino Pagable Filtrada":                 ("D120", "F120"),
-        "Molibdeno Fino Pagable":                   ("D121", "F121"),
+        "Au Fino Pagable Filtrado":                 ("D120", "F120"),
+        "Mo Fino Pagable Filtrado":                 ("D121", "F121"),
         # ── Cátodos ───────────────────────────────────────────────────────────
         "Producción Total de Cátodos de Cu":        ("D123", "F123"),
+        # ── Cátodos — Planta Hidro MET ────────────────────────────────────────
+        "Producción de Cátodos de Cu MET":          ("D125", "F125"),
+        "Mineral Apilado MET":                      ("D126", "F126"),
+        "Mineral Beneficiado MET":                  ("D127", "F127"),
+        "Ley de Cu MET":                            ("F128", "F128"),
+        "Producción de ROM":                        ("D130", "F130"),
+        # ── Cátodos — Planta Hidro OXE ────────────────────────────────────────
+        "Producción de Cátodos de Cu OXE":          ("D132", "F132"),
+        "Mineral Apilado OXE":                      ("D133", "F133"),
+        "Mineral Beneficiado OXE":                  ("D134", "F134"),
+        "Ley de Cu OXE":                            ("F135", "F135"),
     },
     "CMZ": {
         # ── Mina ──────────────────────────────────────────────────────────────
@@ -272,6 +284,31 @@ CONFIG_HOJAS_ADICIONALES = {
         "rango": "A3:W20",
         "compania_fuente": "MLP",
     }
+}
+
+# KPIs que deben ignorarse en la validación por compañía (el label es exactamente
+# como aparece en el Word, comparación normalizada — sin tildes, minúsculas).
+CONFIG_KPI_EXCLUIDOS = {
+    "ANT": {"Palas", "Cargador Frontal"},
+    "CEN": {"Fase", "Remanejo"},
+    "MLP": {
+        "En Planta Desaladora el flujo promedio durante la semana fue de",
+        "En términos de capacidad de impulsión nos encontramos con capacidad de impulsión de",
+        "Agua Continental Consumida",
+        "Recirculación Mauro a Planta",
+        "Intensidad de Uso de Agua en Planta",
+    },
+}
+
+# Subtítulos que marcan un cambio de contexto dentro de la sección de una compañía.
+# Cuando el validador encuentra una de estas líneas actualiza el sufijo de contexto,
+# que se añade al label al buscar en CONFIG_CELDAS_DESVIACIONES.
+# Formato: { "CLAVE": { "Texto del subtítulo": "SUFIJO" } }
+CONFIG_SUBSECCIONES_CONTEXTO = {
+    "CEN": {
+        "Planta Hidro MET": "MET",
+        "Planta Hidro OXE": "OXE",
+    },
 }
 
 # Guarda la ruta de la plantilla Word usada para construir el informe final.

@@ -133,6 +133,10 @@ def api_semana_info():
 
         raiz        = Path(rutas["raiz"])
         excel_madre = Path(rutas["excel_madre"])
+        # Preferir la versión _act si existe (generada al actualizar vínculos)
+        excel_madre_act = excel_madre.parent / (excel_madre.stem + "_act.xlsx")
+        if excel_madre_act.is_file():
+            excel_madre = excel_madre_act
         ind_dir     = Path(rutas["excel_indicadores_dir"])
 
         # Excel indicadores: buscar BDatos*.xlsx
@@ -385,7 +389,7 @@ def _generar(d):
                 str(d["dia_inicio"]), str(d["mes_inicio"]),
                 str(d["dia_fin"]),    str(d["mes_fin"]),
                 str(d["year"]),       str(d["num_semana"]),
-                ",".join(faenas) if faenas else "",
+                ",".join(faenas) if faenas else "__NINGUNA__",
                 act_str,
                 "n",   # validar KPIs — siempre NO, es módulo separado
             ]

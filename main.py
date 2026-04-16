@@ -141,15 +141,28 @@ def _construir_doc(
     doc.add_page_break()
     agregar_titulo(doc, "Accidentabilidad Back-up", nivel=1)
     if incluir_sso:
-        wb_madre = _workbooks_abiertos.get(excel_madre)
-        if wb_madre is None:
-            wb_madre = _obtener_excel_app().Workbooks.Open(excel_madre, UpdateLinks=0)
-            _workbooks_abiertos[excel_madre] = wb_madre
+        def _obtener_wb_madre():
+            wb = _workbooks_abiertos.get(excel_madre)
+            if wb is None:
+                wb = _obtener_excel_app().Workbooks.Open(excel_madre, UpdateLinks=0)
+                _workbooks_abiertos[excel_madre] = wb
+            else:
+                # Verificar que el proxy COM sigue activo; si no, re-abrir
+                try:
+                    _ = wb.Name
+                except Exception:
+                    del _workbooks_abiertos[excel_madre]
+                    wb = _obtener_excel_app().Workbooks.Open(excel_madre, UpdateLinks=0)
+                    _workbooks_abiertos[excel_madre] = wb
+            return wb
+
+        wb_madre = _obtener_wb_madre()
         rangos_tablas_sso = _rangos_tablas_sso_backup_dinamico(wb_madre.Worksheets("SSO"))
         if not rangos_tablas_sso:
             print("  ! Accidentabilidad Back-up: no se encontraron tablas con datos. Verifica hoja SSO.")
         for i, rango_tabla in enumerate(rangos_tablas_sso):
             nombre_img = f"accidentabilidad_{i + 1}.png"
+            wb_madre = _obtener_wb_madre()
             img_backup = exportar_imagen_sso_filtrada(excel_madre, wb_madre.Worksheets("SSO"), rango_tabla, nombre_img)
             if i > 0:
                 doc.add_page_break()
@@ -291,7 +304,9 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True, dis
         "Indica las faenas a procesar separadas por coma (ej: MLP, ANT) o presiona ENTER para todas: "
     ).upper().replace(" ", "")
 
-    if seleccion:
+    if seleccion == "__NINGUNA__":
+        faenas_activas = []
+    elif seleccion:
         faenas_activas = seleccion.split(",")
     else:
         faenas_activas = orden_oficial

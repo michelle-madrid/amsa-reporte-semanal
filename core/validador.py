@@ -3,7 +3,7 @@
 import re
 
 import state
-from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES
+from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO
 
 # ── Resultado estructurado (para panel HTML) ──────────────────────────────────
 _resultados: list = []
@@ -484,12 +484,27 @@ _FIN_SECCIONES = ["Accidentabilidad", "Reportabilidad", "Medio Ambiente", "Asunt
 
 
 def _capturar_lineas(texto, secciones_inicio, secciones_fin):
-    """Devuelve las líneas que caen entre las secciones de inicio y las de fin."""
+    """Devuelve las líneas que caen entre las secciones de inicio y las de fin.
+
+    Los subtítulos de contexto definidos en CONFIG_SUBSECCIONES_CONTEXTO (ej.
+    'Planta Hidro MET') se preservan como líneas aunque empiecen con una palabra
+    que coincida con un marcador de sección (ej. 'Planta').
+    """
+    _subsec_headers = {
+        _norm(h)
+        for comp_map in CONFIG_SUBSECCIONES_CONTEXTO.values()
+        for h in comp_map
+    }
     lineas = []
     capturar = False
     for linea in texto.split("\n"):
         l = linea.strip()
         if not l:
+            continue
+        # Subtítulos de contexto: preservarlos como líneas, nunca como marcadores
+        if _norm(l) in _subsec_headers:
+            if capturar:
+                lineas.append(l)
             continue
         if any(l.startswith(s) for s in secciones_inicio):
             capturar = True
@@ -555,8 +570,18 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
     n_sin_fila = 0
     lineas_revisadas = 0
     _kpis = []   # resultados estructurados de esta sección
+    contexto_suffix = None   # sufijo de subsección activo (ej. "MET", "OXE")
+    _subsecciones = {_norm(k): v for k, v in CONFIG_SUBSECCIONES_CONTEXTO.get(clave, {}).items()}
+    excluidos = {_norm(e) for e in CONFIG_KPI_EXCLUIDOS.get(clave, set())}
 
     for linea in lineas:
+        # Detectar subtítulos de subsección (ej. "Planta Hidro MET")
+        linea_norm = _norm(linea.strip())
+        if linea_norm in _subsecciones:
+            contexto_suffix = _subsecciones[linea_norm]
+            print(f"\n    [contexto: {contexto_suffix}]")
+            continue
+
         # Extraer números solo del segmento de desviación (antes del status)
         linea_dev = _truncar_en_status(linea)
         numeros = _numeros_de_linea(linea_dev)
@@ -572,11 +597,22 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
 
         if label_word:
             label_norm = _norm(label_word)
+            # Verificar si el KPI está explícitamente excluido de validación
+            if label_norm in excluidos:
+                print(f"      ↳ Excluido de validación")
+                continue
             if re.match(r'^acumulado al mes', label_norm):
                 label_norm = "acumulado al mes"
             elif re.match(r'^acumulado al an', label_norm):
                 label_norm = "acumulado al ano"
-            excel_label, nums_fila = _buscar_fila(label_norm, tabla_excel)
+            # Buscar con sufijo de contexto primero, luego sin él
+            excel_label, nums_fila = None, None
+            if contexto_suffix:
+                excel_label, nums_fila = _buscar_fila(
+                    label_norm + " " + contexto_suffix.lower(), tabla_excel
+                )
+            if not excel_label:
+                excel_label, nums_fila = _buscar_fila(label_norm, tabla_excel)
             es_acumulado = label_norm in ("acumulado al mes", "acumulado al ano")
         else:
             excel_label, nums_fila = None, None

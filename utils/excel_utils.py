@@ -71,16 +71,6 @@ def cerrar_excels():
         state._excel_app = None
         state._workbooks_abiertos = {}
 
-# Espera y recupera la imagen copiada al portapapeles desde Excel.
-def _clipboard_imagen_post_copy():
-    """Espera y reintenta leer el portapapeles (CopyPicture a veces tarda)."""
-    for espera in (1.2, 0.6, 0.6):
-        time.sleep(espera)
-        img = ImageGrab.grabclipboard()
-        if img is not None:
-            return img
-    return None
-
 # Exporta un rango de Excel como imagen.
 def exportar_imagen_excel(ruta_excel, hoja, rango, nombre_imagen):
     return exportar_imagen_excel_rangos(ruta_excel, hoja, [rango], nombre_imagen)
@@ -114,21 +104,20 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
         for addr in lista_rangos[1:]:
             rng = excel.Union(rng, ws.Range(addr))
 
-        import win32clipboard
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.CloseClipboard()
-
         rng.CopyPicture(Appearance=1, Format=2)
-
-        img = _clipboard_imagen_post_copy()
+        time.sleep(1)
+        img = ImageGrab.grabclipboard()
         if img:
             img.save(imagen_salida, "PNG")
         else:
-            state.errores.append(f"[ERROR] No se pudo obtener imagen desde el portapapeles ({hoja} {rango_desc})")
+            msg = f"[ERROR] No se pudo obtener imagen del portapapeles ({hoja} {rango_desc})"
+            state.errores.append(msg)
+            print(f"  ✗ {msg}")
 
     except Exception as e:
-        state.errores.append(f"[ERROR] Falló exportación de imagen {hoja} {rango_desc}: {e}")
+        msg = f"[ERROR] Falló exportación de imagen {hoja} {rango_desc}: {e}"
+        state.errores.append(msg)
+        print(f"  ✗ {msg}")
 
     return imagen_salida
 
@@ -164,25 +153,6 @@ def _ultima_fila_con_datos_en_rango_com(ws_com, min_col, min_row, max_col, max_r
             return r
     return min_row
 
-# Implementa una parte específica de la lógica del informe.
-def _guardar_anchos_columnas(ws_com):
-    """Devuelve dict {col_index: ColumnWidth} para todas las columnas del UsedRange."""
-    try:
-        used = ws_com.UsedRange
-        first_col = used.Column
-        last_col = first_col + used.Columns.Count - 1
-        return {c: ws_com.Columns(c).ColumnWidth for c in range(first_col, last_col + 1)}
-    except Exception:
-        return {}
-
-
-def _restaurar_anchos_columnas(ws_com, anchos):
-    """Restaura los anchos de columna guardados previamente."""
-    for c, w in anchos.items():
-        try:
-            ws_com.Columns(c).ColumnWidth = w
-        except Exception:
-            pass
 
 
 def _columna_izquierda_tabla_sso(ws_com, fila_encabezado, max_col_limit=40):
@@ -270,11 +240,9 @@ def _rangos_tablas_sso_backup_dinamico(ws_com):
         if max_row_bloque < h_row:
             max_row_bloque = h_row
 
-        # Anclar min_c en la columna del marcador (no buscar desde A)
-        min_c = marcador_col
-        last_c = _ultima_columna_cabecera_sso(ws_com, h_row)
-        if last_c < min_c:
-            last_c = min_c
+        # Columnas fijas: A (1) hasta J (10)
+        min_c = 1
+        last_c = 10
         last_row = _ultima_fila_con_datos_en_rango_com(ws_com, min_c, h_row, last_c, max_row_bloque)
 
         if not _tabla_sso_tiene_datos(ws_com, h_row, last_row, min_c, last_c):
@@ -315,9 +283,6 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
             col_id = c
             break
 
-    # Guardar anchos de columna antes de cualquier operación (no modificar la hoja)
-    anchos_originales = _guardar_anchos_columnas(ws_com)
-
     # Ocultar filas con ID = 0 o None
     filas_ocultas = []
     if col_id:
@@ -327,20 +292,12 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
                 ws_com.Rows(r).Hidden = True
                 filas_ocultas.append(r)
 
-    # Limpiar portapapeles antes de copiar para evitar que se reutilice imagen anterior
-    try:
-        import win32clipboard
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.CloseClipboard()
-    except Exception as e:
-        print(f"  ! Advertencia: no se pudo limpiar portapapeles: {e}")
-
-    # Capturar imagen directamente desde ws_com (ya abierto en COM)
+    # Exportar via portapapeles (mapa de bits) para máxima calidad de imagen.
     try:
         rng = ws_com.Range(rango)
         rng.CopyPicture(Appearance=1, Format=2)
-        img = _clipboard_imagen_post_copy()
+        time.sleep(1)
+        img = ImageGrab.grabclipboard()
         if img:
             img.save(imagen_salida, "PNG")
         else:
@@ -352,10 +309,9 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
         state.errores.append(msg)
         print(f"  ✗ {msg}")
 
-    # Restaurar filas ocultas y anchos de columna originales
+    # Restaurar filas ocultas
     for r in filas_ocultas:
         ws_com.Rows(r).Hidden = False
-    _restaurar_anchos_columnas(ws_com, anchos_originales)
 
     return imagen_salida
 
@@ -454,35 +410,45 @@ def _ordenar_hoja_sso(wb):
     """Ordena cada tabla SSO por su columna Fecha de forma ascendente y permanente."""
     try:
         ws = wb.Worksheets("SSO")
-        anchos = _guardar_anchos_columnas(ws)
-        try:
-            used = ws.UsedRange
-            sheet_max_r = used.Row + used.Rows.Count - 1
-            filas_h = [r for r, _ in _filas_encabezado_tablas_sso(ws)]  # solo filas, descartar col
-            if not filas_h:
-                return
-            tablas_ordenadas = 0
-            for idx, h_row in enumerate(filas_h):
-                next_h = filas_h[idx + 1] if idx + 1 < len(filas_h) else None
-                last_row = (next_h - 1) if next_h is not None else sheet_max_r
-                if last_row <= h_row:
+        used = ws.UsedRange
+        sheet_max_r = used.Row + used.Rows.Count - 1
+        filas_h = [r for r, _ in _filas_encabezado_tablas_sso(ws)]
+        if not filas_h:
+            return
+        tablas_ordenadas = 0
+        for idx, h_row in enumerate(filas_h):
+            next_h = filas_h[idx + 1] if idx + 1 < len(filas_h) else None
+            last_row = (next_h - 1) if next_h is not None else sheet_max_r
+            if last_row <= h_row:
+                continue
+            min_c = _columna_izquierda_tabla_sso(ws, h_row)
+            last_c = _ultima_columna_cabecera_sso(ws, h_row)
+            col_id = None
+            col_fecha = None
+            for c in range(min_c, last_c + 1):
+                v = ws.Cells(h_row, c).Value
+                if not v:
                     continue
-                min_c = _columna_izquierda_tabla_sso(ws, h_row)
-                last_c = _ultima_columna_cabecera_sso(ws, h_row)
-                col_fecha = None
-                for c in range(min_c, last_c + 1):
-                    v = ws.Cells(h_row, c).Value
-                    if v and "fecha" in str(v).strip().lower():
-                        col_fecha = c
-                        break
-                if not col_fecha:
-                    continue
-                data_range = ws.Range(ws.Cells(h_row, min_c), ws.Cells(last_row, last_c))
-                data_range.Sort(Key1=ws.Cells(h_row, col_fecha), Order1=1, Header=1)
-                tablas_ordenadas += 1
-            print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
-        finally:
-            _restaurar_anchos_columnas(ws, anchos)
+                v_low = str(v).strip().lower()
+                if col_id is None and SSO_MARCADOR_TABLA in v_low:
+                    col_id = c
+                if col_fecha is None and "fecha" in v_low:
+                    col_fecha = c
+            if not col_id and not col_fecha:
+                continue
+            data_range = ws.Range(ws.Cells(h_row, min_c), ws.Cells(last_row, last_c))
+            if col_id and col_fecha:
+                data_range.Sort(
+                    Key1=ws.Cells(h_row, col_id),    Order1=1,
+                    Key2=ws.Cells(h_row, col_fecha),  Order2=1,
+                    Header=1, Orientation=1,
+                )
+            elif col_id:
+                data_range.Sort(Key1=ws.Cells(h_row, col_id), Order1=1, Header=1, Orientation=1)
+            else:
+                data_range.Sort(Key1=ws.Cells(h_row, col_fecha), Order1=1, Header=1, Orientation=1)
+            tablas_ordenadas += 1
+        print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
     except Exception as e:
         msg = f"[REVISAR] No se pudo ordenar SSO: {e}"
         state.errores.append(msg)
@@ -512,18 +478,46 @@ def _buscar_wb_en_excel_usuario(ruta_excel):
 
 def _refrescar_todos_los_vinculos(wb):
     """
-    Fuerza el refresco de TODOS los vínculos externos del workbook.
-    Después de cambiar rutas de faenas seleccionadas, esto asegura que los
-    vínculos no modificados también se recalculen (evita #REF en celdas no tocadas).
+    Fuerza el refresco de TODOS los vínculos externos del workbook, de a uno.
+    Actualizar todos juntos hace que un solo fallo aborte el lote completo y deje
+    el COM inestable. Actualizando individualmente se aíslan los errores.
     """
     try:
         links = wb.LinkSources(1)   # 1 = xlExcelLinks
         if not links:
             return
         print(f"  Refrescando {len(links)} vínculo(s) externos…")
-        wb.UpdateLink(links, 1)
+        errores_link = []
+        for link in links:
+            try:
+                wb.UpdateLink(link, 1)
+            except Exception as e:
+                errores_link.append(os.path.basename(str(link)))
+        if errores_link:
+            print(f"  ! No se pudieron refrescar {len(errores_link)} vínculo(s): {', '.join(errores_link)}")
     except Exception as e:
-        print(f"  ! No se pudieron refrescar todos los vínculos: {e}")
+        print(f"  ! Error al obtener lista de vínculos: {e}")
+
+
+def _cerrar_wb_por_nombre(excel_app, ruta_objetivo, limpiar_cache=False):
+    """Cierra el workbook cuyo nombre de archivo coincide con ruta_objetivo, si está abierto."""
+    nombre_objetivo = os.path.basename(ruta_objetivo).lower()
+    try:
+        for i in range(excel_app.Workbooks.Count, 0, -1):
+            try:
+                wb_test = excel_app.Workbooks(i)
+                if os.path.basename(wb_test.FullName).lower() == nombre_objetivo:
+                    wb_test.Close(False)
+                    if limpiar_cache:
+                        # Eliminar del cache por ruta completa o nombre
+                        for k in list(state._workbooks_abiertos.keys()):
+                            if os.path.basename(str(k)).lower() == nombre_objetivo:
+                                del state._workbooks_abiertos[k]
+                    break
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False):
@@ -557,6 +551,10 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
             except Exception as e:
                 print(f"  ! No se pudo recalcular: {e}")
             if ruta_act:
+                # Pausa breve para que el COM cross-proceso se estabilice tras el refresco
+                time.sleep(1)
+                # Cerrar _act si ya está abierto en la instancia del usuario
+                _cerrar_wb_por_nombre(excel_usuario, ruta_act)
                 try:
                     wb_usuario.SaveCopyAs(ruta_act)
                     print(f"  ✓ Copia guardada en: {ruta_act}")
@@ -583,6 +581,8 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
         except Exception as e:
             print(f"  ! No se pudo recalcular: {e}")
         if ruta_act:
+            # Cerrar _act si ya está abierto en nuestra instancia DispatchEx
+            _cerrar_wb_por_nombre(excel, ruta_act, limpiar_cache=True)
             try:
                 wb.SaveCopyAs(ruta_act)
                 print(f"  ✓ Copia guardada en: {ruta_act}")
