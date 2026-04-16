@@ -1094,6 +1094,16 @@
       </div>
     </div>
 
+    <!-- Resumen de observaciones -->
+    <div id="gramSummaryWrap" style="display:none; margin-bottom:16px;">
+      <div class="card" style="border-left:4px solid #D69E2E; padding-left:20px;">
+        <div class="card-title" style="color:#975A16; border-bottom-color:#FEF3C7;">
+          ⚠ Observaciones encontradas
+        </div>
+        <div id="gramSummaryBody" style="font-size:13px; color:var(--gray);"></div>
+      </div>
+    </div>
+
   </div><!-- /tab-pdf -->
 
   <div class="page-bottom"></div>
@@ -1127,7 +1137,9 @@ let inlineActive  = false;   // true cuando el log inline está activo (tarea ge
 let reviewItems   = [];      // advertencias acumuladas durante la generación
 let resultPath    = '';      // ruta del informe generado
 let _calendario   = {};      // { "1": {dia_inicio,mes_inicio,dia_fin,mes_fin,detalles}, ... }
-let gramActive    = false;   // true cuando el log inline de gramática está activo
+let gramActive      = false;  // true cuando el log inline de gramática está activo
+let gramErrors      = [];     // [{para, msg, detail}] observaciones acumuladas
+let gramCurrentPara = '';     // párrafo activo durante la revisión
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tabs
@@ -1647,6 +1659,9 @@ async function lanzarOrtografia() {
   const bar   = document.getElementById('gramProgress');
   const body  = document.getElementById('gramLogBody');
   body.innerHTML = '';
+  gramErrors      = [];
+  gramCurrentPara = '';
+  document.getElementById('gramSummaryWrap').style.display = 'none';
   badge.textContent      = '● Analizando…';
   badge.className        = 'il-badge visible';
   badge.style.background = 'rgba(245,166,35,.25)';
@@ -1656,12 +1671,27 @@ async function lanzarOrtografia() {
   gramActive             = true;
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  await _lanzarTarea('/api/revisar-ortografia', { ruta_docx, faenas: getFaenas() }, 'btnPDF', () => {
+  await _lanzarTarea('/api/revisar-ortografia', { ruta_docx }, 'btnPDF', () => {
     gramActive             = false;
     bar.style.display      = 'none';
     badge.textContent      = '✓ Análisis completado';
     badge.style.background = 'rgba(39,174,96,.22)';
     badge.style.color      = '#276749';
+
+    // Mostrar resumen si hay observaciones
+    const summaryWrap = document.getElementById('gramSummaryWrap');
+    const summaryBody = document.getElementById('gramSummaryBody');
+    if (gramErrors.length > 0) {
+      summaryBody.innerHTML = gramErrors.map(e => `
+        <div style="padding:8px 0; border-bottom:1px solid #FEF3C7;">
+          <div style="font-size:11px; color:var(--gray-l); margin-bottom:3px;">${_esc(e.para)}</div>
+          <div style="color:var(--err);">${_esc(e.msg)}</div>
+          ${e.detail ? `<div style="font-size:12px; color:var(--gray); margin-top:2px;">${_esc(e.detail)}</div>` : ''}
+        </div>`
+      ).join('');
+      summaryWrap.style.display = '';
+      summaryWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   });
 }
 
@@ -1802,6 +1832,15 @@ function appendRawLog(text) {
     const gb   = document.getElementById('gramLogBody');
     const item = _makeProgItem(text);
     if (item) { gb.appendChild(item); gb.scrollTop = gb.scrollHeight; }
+    // Acumular errores para el resumen, con contexto de párrafo
+    const t0 = text.trimStart();
+    if (/^\[\d+\/\d+\]/.test(t0)) {
+      gramCurrentPara = t0.replace(/…$/, '…');  // guardar contexto de párrafo
+    } else if (t0.startsWith('! [')) {
+      gramErrors.push({ para: gramCurrentPara, msg: text.trim(), detail: '' });
+    } else if (t0.startsWith('"') && gramErrors.length > 0) {
+      gramErrors[gramErrors.length - 1].detail = text.trim();
+    }
   }
 
   if (!inlineActive) return;

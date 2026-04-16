@@ -151,7 +151,7 @@ def _extraer_label(linea):
         return None
     m = re.search(r'\d', linea)
     if m and m.start() > 3:
-        label = linea[:m.start()].strip().rstrip(':').rstrip()
+        label = re.sub(r'[\s:(;\-+]+$', '', linea[:m.start()]).strip()
         if len(label) >= 3:
             return label
     if not m and len(linea.strip()) >= 3:

@@ -341,13 +341,14 @@ def revisar_gramatica(ruta_docx, faenas=None):
 
         nueva = detectar_compania(texto)
         if nueva:
-            compania_actual = nueva
-            # Extraer clave del formato "MLP – Los Pelambres"
-            compania_clave_actual = nueva.split(" – ")[0].strip()
-            # Mostrar cabecera solo si vamos a revisar esta sección
-            if faenas_set is None or compania_clave_actual in faenas_set:
-                print(f"── {compania_actual}")
-                _flush()
+            if nueva != compania_actual:
+                compania_actual = nueva
+                # Extraer clave del formato "MLP – Los Pelambres"
+                compania_clave_actual = nueva.split(" – ")[0].strip()
+                # Mostrar cabecera solo si vamos a revisar esta sección
+                if faenas_set is None or compania_clave_actual in faenas_set:
+                    print(f"── {compania_actual}")
+                    _flush()
             continue
 
         # Saltar párrafos de secciones no seleccionadas
@@ -403,10 +404,15 @@ def revisar_gramatica(ruta_docx, faenas=None):
                         continue
 
             sugerencias = ", ".join(sugs) if sugs else "—"
+            ctx_ini = max(0, offset - 40)
+            ctx_fin = min(len(texto), offset + longitud + 40)
+            prefijo = ("…" if ctx_ini > 0 else "") + texto[ctx_ini:offset]
+            sufijo  = texto[offset + longitud:ctx_fin] + ("…" if ctx_fin < len(texto) else "")
+            contexto = f'{prefijo}[{fragmento}]{sufijo}'
             errores_parrafo.append((
                 f"{regla_id} [{cat_name}]",
                 mensaje,
-                f'  "{fragmento}"  →  {sugerencias}',
+                f'  "{contexto}"  →  {sugerencias}',
             ))
 
         if errores_parrafo:

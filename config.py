@@ -150,8 +150,8 @@ CONFIG_CELDAS_DESVIACIONES = {
         # ── Planta ────────────────────────────────────────────────────────────
         "Mineral Apilado":              ("D68", "F68"),
         "Mineral Beneficiado":          ("D69", "F69"),
-        "Ley Cu":                       ("D70", "F70"),
-        "Recuperación Cu":              ("D71", "F71"),
+        "Ley Cu":                       ("F70", "F70"),
+        "Recuperación Cu":              ("F71", "F71"),
         "Descarga de Ripios":           ("D72", "F72"),
         "Cobre Fino Producido":         ("D73", "F73"),
     },
@@ -289,7 +289,7 @@ CONFIG_HOJAS_ADICIONALES = {
 # KPIs que deben ignorarse en la validación por compañía (el label es exactamente
 # como aparece en el Word, comparación normalizada — sin tildes, minúsculas).
 CONFIG_KPI_EXCLUIDOS = {
-    "ANT": {"Palas", "Cargador Frontal"},
+    "ANT": {"Pala", "Cargador", "Extracción a desarrollo"},
     "CEN": {"Fase", "Remanejo"},
     "MLP": {
         "En Planta Desaladora",
