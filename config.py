@@ -295,6 +295,12 @@ CONFIG_HOJAS_ADICIONALES = {
     }
 }
 
+# KPIs cuyo label empieza con alguno de estos prefijos deben ignorarse en la validación.
+# Comparación normalizada (sin tildes, minúsculas).
+CONFIG_KPI_PREFIJOS_EXCLUIDOS = {
+    "FCAB": {"minera"},
+}
+
 # KPIs que deben ignorarse en la validación por compañía (el label es exactamente
 # como aparece en el Word, comparación normalizada — sin tildes, minúsculas).
 CONFIG_KPI_EXCLUIDOS = {

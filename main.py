@@ -57,7 +57,21 @@ def _extraer_imagenes_a_temp(ruta_word):
     """
     os.makedirs(_TEMP, exist_ok=True)
 
+    # Limpiar archivos canónicos de ejecuciones anteriores para evitar cache estale
+    _IMAGENES_CANONICAS = (
+        ["tabla_principal.png", "gestion_hidrica.png",
+         "valor_semanal.png", "valor_mensual.png", "valor_anual.png",
+         "tabla_hidrica_mlp.png"]
+        + [f"tabla_{c}.png" for c in CONFIG_COMPANIAS]
+        + [f"accidentabilidad_{i}.png" for i in range(1, 20)]
+    )
+    for _nombre in _IMAGENES_CANONICAS:
+        _ruta = os.path.join(_TEMP, _nombre)
+        if os.path.exists(_ruta):
+            os.remove(_ruta)
+
     _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
+    _ESTILOS_TITULO = {"Título 1 AMSA", "Título 2 AMSA"}
 
     ns_a = "http://schemas.openxmlformats.org/drawingml/2006/main"
     ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -70,8 +84,8 @@ def _extraer_imagenes_a_temp(ruta_word):
     for para in doc.paragraphs:
         texto = para.text.strip()
 
-        # ── Detectar cambio de sección ──────────────────────────────────────
-        if texto:
+        # ── Detectar cambio de sección (solo párrafos con estilo de título) ─
+        if texto and para.style.name in _ESTILOS_TITULO:
             # Orden importa: "Accidentabilidad Back-up" antes que "Accidentabilidad"
             nueva_seccion = None
             if texto == _SECCION_BACKUP:
@@ -118,7 +132,8 @@ def _construir_doc(
     carpeta_destino, nombre_final,
     incluir_sso=True,
     incluir_gh=True,
-    faenas_con_excel=None,  # None = todas; set/list = solo esas usan Excel para su imagen
+    faenas_con_excel=None,           # None = todas; set/list = solo esas usan Excel para su imagen
+    secciones_con_datos_previas=None, # claves que tenían datos reales en el Word previo
 ):
     """Construye y guarda el documento Word.  No hace preguntas ni resuelve rutas."""
     escribir_fechas_excel(excel_madre, dia_inicio, mes_inicio, dia_fin, mes_fin)
@@ -140,35 +155,48 @@ def _construir_doc(
 
     es_parcial = faenas_con_excel is not None
 
-    # ── Aviso de información incompleta (solo en modo generación completa) ─
-    if not es_parcial:
-        faenas_sin_texto = [c for c in ORDEN_OFICIAL if not informes.get(c)]
-        info_incompleta  = bool(faenas_sin_texto) or not incluir_sso or not incluir_gh
-        if info_incompleta:
-            partes = []
-            if faenas_sin_texto:
-                partes.append(f"Faenas: {', '.join(faenas_sin_texto)}")
-            if not incluir_sso:
-                partes.append("SSO")
-            if not incluir_gh:
-                partes.append("Gestión Hídrica")
-            aviso = f"[Información incompleta — pendiente: {'; '.join(partes)}]"
+    # ── Línea de estado: secciones actualizadas vs pendientes ─────────────
+    _actualizadas = []
+    _pendientes   = []
+    _previas = set(secciones_con_datos_previas or [])
+    for _clave in ORDEN_OFICIAL:
+        _tiene_contenido = bool(informes.get(_clave)) and _MSG_PENDIENTE not in informes.get(_clave, "")
+        # Actualizada si: fue seleccionada, O tiene contenido real, O el Word previo la tenía con datos
+        if (faenas_con_excel is None and _tiene_contenido) or \
+           (faenas_con_excel is not None and (_clave in faenas_con_excel or _tiene_contenido or _clave in _previas)):
+            _actualizadas.append(_clave)
         else:
-            aviso = None
+            _pendientes.append(_clave)
+    if incluir_sso:
+        _actualizadas.append("SSO")
     else:
-        aviso = None  # En modo parcial no se generan disclaimers
+        _pendientes.append("SSO")
+    if incluir_gh:
+        _actualizadas.append("Gestión Hídrica")
+    else:
+        _pendientes.append("Gestión Hídrica")
 
-    if aviso:
-        p_aviso = doc.add_paragraph(style="Normal AMSA")
-        p_aviso.paragraph_format.space_before = Pt(0)
-        p_aviso.paragraph_format.space_after  = Pt(10)
-        p_aviso.paragraph_format.line_spacing = 1.0
-        run_aviso = p_aviso.add_run(aviso)
-        run_aviso.bold = True
-        run_aviso.font.name = "Arial"
-        run_aviso.font.size = Pt(11)
-        run_aviso.font.color.rgb = RGBColor(0xC0, 0x50, 0x00)   # naranja oscuro
-        print(f"  ⚠ {aviso}")
+    if _pendientes:
+        p_estado = doc.add_paragraph(style="Normal AMSA")
+        p_estado.paragraph_format.line_spacing = 1.0
+        p_estado.paragraph_format.space_before = Pt(0)
+        p_estado.paragraph_format.space_after  = Pt(10)
+        p_estado.paragraph_format.left_indent  = Cm(0)
+        p_estado.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        if _actualizadas:
+            _r = p_estado.add_run(f"Actualizadas: {', '.join(_actualizadas)}")
+            _r.font.name  = "Arial"
+            _r.font.size  = Pt(10)
+            _r.bold       = True
+            _r.font.color.rgb = RGBColor(0x12, 0x6F, 0x7A)
+            _sep = p_estado.add_run("   |   ")
+            _sep.font.name = "Arial"
+            _sep.font.size = Pt(10)
+        _rp = p_estado.add_run(f"Pendientes: {', '.join(_pendientes)}")
+        _rp.font.name  = "Arial"
+        _rp.font.size  = Pt(10)
+        _rp.bold       = True
+        _rp.font.color.rgb = RGBColor(0xC0, 0x50, 0x00)
 
     resumen_texto = extraer_resumen_excel(excel_madre)
     for linea in resumen_texto.split("\n"):
@@ -192,16 +220,10 @@ def _construir_doc(
     if incluir_gh:
         img_hidrica = exportar_imagen_excel(excel_madre, "Gestión Hídrica", "A3:W20", "gestion_hidrica.png")
         agregar_imagen(doc, img_hidrica, 19, 3.24, "")
-    elif es_parcial:
-        # Modo Word existente sin GH seleccionada: restaurar imagen del Word previo
-        img_cache = os.path.join(_TEMP, "gestion_hidrica.png")
-        if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
-            agregar_imagen(doc, img_cache, 19, 3.24, "")
-        else:
-            agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
-        print("  → Gestión Hídrica: En espera de envío información")
+        if not es_parcial:
+            print("  → Gestión Hídrica: En espera de envío información")
 
     doc.add_page_break()
     agregar_titulo(doc, "Accidentabilidad", nivel=2)
@@ -451,13 +473,15 @@ def actualizar_secciones_word(
         if not t:
             continue
         if t in _N2K:
+            # Siempre detectar: los nombres de compañías son únicos en el documento
             _save_buf()
             clave_actual = _N2K[t]
             buf = []
-        elif t in _SECCIONES_STOP:
-            _save_buf()
-            clave_actual = None
-            buf = []
+        elif t in _SECCIONES_STOP and clave_actual is None:
+            # Solo detener antes de entrar a una compañía (nivel documento).
+            # Si clave_actual ya está seteada, "Accidentabilidad" es un subtítulo
+            # de Hechos Relevantes → se agrega al buf como contenido normal.
+            pass
         elif clave_actual:
             buf.append(t)
     _save_buf()
@@ -535,6 +559,7 @@ def actualizar_secciones_word(
         incluir_sso=incluir_sso,
         incluir_gh=incluir_gh,
         faenas_con_excel=set(faenas_actualizar),
+        secciones_con_datos_previas=con_datos,
     )
 
 

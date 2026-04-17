@@ -476,7 +476,15 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
     return
 
   if not excel_madre:
-    return  # Faena no seleccionada: no pegar imagen de producción
+    # Faena no seleccionada: usar imagen cacheada del Word previo si existe
+    img_cache = os.path.join(r"C:\Temp", f"tabla_{clave}.png")
+    if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
+      agregar_titulo(doc, "Producción Semana", nivel=2)
+      alto_imagen = 19.3 if clave == "CEN" else None
+      agregar_imagen(doc, img_cache, 19, alto_imagen, "")
+      if clave == "CEN":
+        doc.add_page_break()
+    return
 
   agregar_titulo(doc, "Producción Semana", nivel=2)
 

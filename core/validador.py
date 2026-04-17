@@ -3,7 +3,7 @@
 import re
 
 import state
-from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO
+from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO
 
 # ── Resultado estructurado (para panel HTML) ──────────────────────────────────
 _resultados: list = []
@@ -572,7 +572,8 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
     _kpis = []   # resultados estructurados de esta sección
     contexto_suffix = None   # sufijo de subsección activo (ej. "MET", "OXE")
     _subsecciones = {_norm(k): v for k, v in CONFIG_SUBSECCIONES_CONTEXTO.get(clave, {}).items()}
-    excluidos = {_norm(e) for e in CONFIG_KPI_EXCLUIDOS.get(clave, set())}
+    excluidos         = {_norm(e) for e in CONFIG_KPI_EXCLUIDOS.get(clave, set())}
+    prefijos_excluidos = {_norm(p) for p in CONFIG_KPI_PREFIJOS_EXCLUIDOS.get(clave, set())}
 
     for linea in lineas:
         # Detectar subtítulos de subsección (ej. "Planta Hidro MET")
@@ -597,8 +598,9 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
 
         if label_word:
             label_norm = _norm(label_word)
-            # Verificar si el KPI está explícitamente excluido de validación
-            if any(e in label_norm for e in excluidos):
+            # Verificar si el KPI está excluido (por substring o por prefijo)
+            if any(e in label_norm for e in excluidos) or \
+               any(label_norm.startswith(p) for p in prefijos_excluidos):
                 print(f"      ↳ Excluido de validación")
                 continue
             if re.match(r'^acumulado al mes', label_norm):

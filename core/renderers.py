@@ -1,5 +1,6 @@
 """Renderizadores y procesadores por faena para construir el informe Word."""
 
+import os
 import re
 import unicodedata
 
@@ -755,9 +756,8 @@ def cen_render_medio_ambiente(doc, lineas):
     if not texto:
       continue
 
-    texto = re.sub(r"^[•·\-\s]+", "", texto).strip()
+    texto = re.sub(r"^(o\s+|[•·\-\s]+)", "", texto).strip()
     texto = limpiar_texto_global(texto)
-
 
     if texto.startswith("Fuente:") or texto.startswith("Nota:"):
       p = doc.add_paragraph(style="Normal AMSA")
@@ -964,7 +964,14 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
     p_img = doc.add_paragraph(style="Normal AMSA")
     p_img.paragraph_format.space_before = Pt(0)
     p_img.paragraph_format.space_after = Pt(12)
-  # else: MLP no seleccionada → no pegar imagen de gestión hídrica MLP
+  else:
+    # MLP no seleccionada: usar imagen cacheada del Word previo si existe
+    img_cache = os.path.join(r"C:\Temp", "tabla_hidrica_mlp.png")
+    if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
+      agregar_imagen(doc, img_cache, 19, 3.24, "")
+      p_img = doc.add_paragraph(style="Normal AMSA")
+      p_img.paragraph_format.space_before = Pt(0)
+      p_img.paragraph_format.space_after = Pt(12)
 
   patron_fechas = re.compile(
     r"\b(?:El día\s)?\d{1,2}\sde\s\w+\sde\s\d{4}(?:\s*-\s*\d{1,2}\sde\s\w+\sde\s\d{4})?\b",

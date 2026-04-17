@@ -344,17 +344,20 @@ def api_word_secciones():
             encontradas[clave_actual] = bool(buf) and (MSG not in contenido)
             buf = []
 
+        _ESTILOS_TITULO = {"Título 1 AMSA", "Título 2 AMSA"}
+
         for p in doc.paragraphs:
             t = p.text.strip()
             if not t:
                 continue
-            if t == SECCION_BACKUP:
+            es_titulo = p.style.name in _ESTILOS_TITULO
+            if es_titulo and t == SECCION_BACKUP:
                 _flush(); clave_actual = None
-            elif t == SECCION_SSO:
+            elif es_titulo and t == SECCION_SSO:
                 _flush(); clave_actual = "SSO"
-            elif t == SECCION_GH:
+            elif es_titulo and t == SECCION_GH:
                 _flush(); clave_actual = "GH"
-            elif t in _N2K:
+            elif es_titulo and t in _N2K:
                 _flush(); clave_actual = _N2K[t]
             elif clave_actual:
                 buf.append(t)
