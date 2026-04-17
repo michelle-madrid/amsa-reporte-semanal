@@ -164,7 +164,7 @@ def _validar_clasificacion_acumulados(lineas_acum, clave):
 
 
 # Valida que existan las líneas de acumulado mensual y anual en las principales desviaciones.
-def validar_acumulados_principales_desviaciones(texto_compania, clave):
+def validar_acumulados_principales_desviaciones(texto_compania, clave, es_seleccionada=True):
   extractores_por_compania = {
     "MLP": [
       extraer_mina,
@@ -212,11 +212,11 @@ def validar_acumulados_principales_desviaciones(texto_compania, clave):
   tiene_acum_mes = any("acumulado al mes" in l for l in lineas_limpias)
   tiene_acum_anio = any("acumulado al año" in l for l in lineas_limpias)
 
-  if not tiene_acum_mes:
+  if not tiene_acum_mes and es_seleccionada:
     print(f"[REVISAR] {clave} - Principales Desviaciones: no viene 'Acumulado al mes'")
     errores.append(f"{clave} - Principales Desviaciones: falta 'Acumulado al mes'")
 
-  if not tiene_acum_anio:
+  if not tiene_acum_anio and es_seleccionada:
     print(f"[REVISAR] {clave} - Principales Desviaciones: no viene 'Acumulado al año'")
     errores.append(f"{clave} - Principales Desviaciones: falta 'Acumulado al año'")
 
@@ -964,14 +964,7 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
     p_img = doc.add_paragraph(style="Normal AMSA")
     p_img.paragraph_format.space_before = Pt(0)
     p_img.paragraph_format.space_after = Pt(12)
-  else:
-    import os as _os
-    ruta_cache_gh = _os.path.join(r"C:\Temp", "tabla_hidrica_mlp.png")
-    if _os.path.isfile(ruta_cache_gh):
-      agregar_imagen(doc, ruta_cache_gh, 19, 3.24, "")
-      p_img = doc.add_paragraph(style="Normal AMSA")
-      p_img.paragraph_format.space_before = Pt(0)
-      p_img.paragraph_format.space_after = Pt(12)
+  # else: MLP no seleccionada → no pegar imagen de gestión hídrica MLP
 
   patron_fechas = re.compile(
     r"\b(?:El día\s)?\d{1,2}\sde\s\w+\sde\s\d{4}(?:\s*-\s*\d{1,2}\sde\s\w+\sde\s\d{4})?\b",
@@ -1044,7 +1037,7 @@ def procesar_mlp(doc, texto_compania, excel_madre):
     agregar_produccion_semana_faena(doc, "MLP", excel_madre)
     doc.add_paragraph()
     agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-    validar_acumulados_principales_desviaciones(texto_compania, "MLP")
+    validar_acumulados_principales_desviaciones(texto_compania, "MLP", es_seleccionada=excel_madre is not None)
     orden = ORDEN_PRINCIPALES_DESVIACIONES["MLP"]
     for nombre_seccion, orden_subtitulos in orden.items():
         if nombre_seccion == "Mina":
@@ -1066,7 +1059,7 @@ def _procesar_faena_generica(doc, texto_compania, excel_madre, clave):
     agregar_produccion_semana_faena(doc, clave, excel_madre)
     doc.add_paragraph("") 
     agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-    validar_acumulados_principales_desviaciones(texto_compania, clave)
+    validar_acumulados_principales_desviaciones(texto_compania, clave, es_seleccionada=excel_madre is not None)
     orden = ORDEN_PRINCIPALES_DESVIACIONES.get(clave, {})
     for nombre_seccion, orden_subtitulos in orden.items():
         procesar_seccion(doc, texto_compania, clave, nombre_seccion, orden_subtitulos, excel_madre)
@@ -1089,7 +1082,7 @@ def procesar_cen(doc, texto_compania, excel_madre):
   agregar_produccion_semana_faena(doc, "CEN", excel_madre)
   doc.add_paragraph("") 
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-  validar_acumulados_principales_desviaciones(texto_compania, "CEN")
+  validar_acumulados_principales_desviaciones(texto_compania, "CEN", es_seleccionada=excel_madre is not None)
   procesar_seccion(
     doc,
     texto_compania,
@@ -1255,7 +1248,7 @@ def procesar_cmz(doc, texto_compania, excel_madre):
   agregar_produccion_semana_faena(doc, "CMZ", excel_madre)
   doc.add_paragraph("")
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-  validar_acumulados_principales_desviaciones(texto_compania, "CMZ")
+  validar_acumulados_principales_desviaciones(texto_compania, "CMZ", es_seleccionada=excel_madre is not None)
 
   cmz_render_mina(doc, texto_compania, excel_madre)
   cmz_render_planta(doc, texto_compania, excel_madre)
@@ -1469,7 +1462,7 @@ def procesar_fcab(doc, texto_compania, excel_madre):
   doc.add_paragraph("")
 
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-  validar_acumulados_principales_desviaciones(texto_compania, "FCAB")
+  validar_acumulados_principales_desviaciones(texto_compania, "FCAB", es_seleccionada=excel_madre is not None)
 
   fcab_render_tren(doc, texto_compania, excel_madre)
   fcab_render_camion(doc, texto_compania, excel_madre)

@@ -476,15 +476,7 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
     return
 
   if not excel_madre:
-    # Sección no seleccionada: usar imagen cacheada si existe
-    ruta_cache = _os.path.join(r"C:\Temp", f"tabla_{clave}.png")
-    if not _os.path.isfile(ruta_cache):
-      return
-    agregar_titulo(doc, "Producción Semana", nivel=2)
-    agregar_imagen(doc, ruta_cache, 19, 19.3 if clave == "CEN" else None, "")
-    if clave == "CEN":
-      doc.add_page_break()
-    return
+    return  # Faena no seleccionada: no pegar imagen de producción
 
   agregar_titulo(doc, "Producción Semana", nivel=2)
 

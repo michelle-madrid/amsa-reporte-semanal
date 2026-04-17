@@ -369,8 +369,10 @@ _VINCULOS_IGNORAR = [
     "cd mina",
 ]
 
-def _buscar_excel_en_carpeta(carpeta, patron, clave):
-    """Busca un .xlsx cuyo nombre contenga 'patron'. Si no lo encuentra, abre selector."""
+def _buscar_excel_en_carpeta(carpeta, patron, clave, carpeta_fallback=None, silencioso=False):
+    """Busca un .xlsx cuyo nombre contenga 'patron'.
+    Si no lo encuentra, intenta en carpeta_fallback (semana anterior) antes de abrir selector.
+    silencioso=True suprime los mensajes de advertencia (usar para faenas no seleccionadas)."""
     if os.path.isdir(carpeta):
         candidatos = [
             f for f in os.listdir(carpeta)
@@ -381,22 +383,53 @@ def _buscar_excel_en_carpeta(carpeta, patron, clave):
         if len(candidatos) == 1:
             return os.path.join(carpeta, candidatos[0])
         if len(candidatos) > 1:
-            print(f"  ! {clave}: múltiples coincidencias para '{patron}' en {carpeta} → abriendo selector")
+            if not silencioso:
+                print(f"  ! {clave}: múltiples coincidencias para '{patron}' en {carpeta} → abriendo selector")
+            return seleccionar_archivo(f"Excel de {clave}")
         else:
-            print(f"  ! {clave}: no se encontró '{patron}' en {carpeta} → abriendo selector")
+            if not silencioso:
+                print(f"  ! {clave}: no se encontró '{patron}' en {carpeta}")
     else:
-        print(f"  ! {clave}: carpeta no existe: {carpeta} → abriendo selector")
+        if not silencioso:
+            print(f"  ! {clave}: carpeta no existe: {carpeta}")
+
+    # Intentar en la carpeta de la semana anterior
+    if carpeta_fallback and os.path.isdir(str(carpeta_fallback)):
+        candidatos_fb = [
+            f for f in os.listdir(str(carpeta_fallback))
+            if f.lower().endswith(".xlsx")
+            and not f.startswith("~$")
+            and patron in f.lower()
+        ]
+        if len(candidatos_fb) == 1:
+            ruta = os.path.join(str(carpeta_fallback), candidatos_fb[0])
+            if not silencioso:
+                print(f"  ⚠ {clave}: no encontrado en semana actual → usando semana anterior: {candidatos_fb[0]}")
+            return ruta
+        elif len(candidatos_fb) > 1:
+            if not silencioso:
+                print(f"  ! {clave}: múltiples coincidencias en semana anterior → abriendo selector")
+        else:
+            if not silencioso:
+                print(f"  ! {clave}: tampoco encontrado en semana anterior → abriendo selector")
+    elif carpeta_fallback:
+        if not silencioso:
+            print(f"  ! {clave}: carpeta de semana anterior no existe → abriendo selector")
+    else:
+        if not silencioso:
+            print(f"  ! {clave}: sin fallback → abriendo selector")
 
     return seleccionar_archivo(f"Excel de {clave}")
 
 # Redirige los vínculos externos del workbook a las subcarpetas de faena de la semana actual.
-def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None):  # carpeta_raiz reservado para uso futuro
+def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None, informes_dirs_fallback=None, faenas_seleccionadas=None):
     """
     Para cada vínculo externo:
     - Si el nombre contiene un fragmento de _VINCULOS_IGNORAR → se omite.
     - Si la subcarpeta de faena aparece en el path → busca por patrón en esa subcarpeta.
-    - Si el nombre del archivo coincide con un patrón de _PATRON_EXCEL_RAIZ → busca en carpeta_raiz.
+      Si no lo encuentra, intenta en la carpeta equivalente de informes_dirs_fallback (semana anterior).
     - Si nada coincide → abre el explorador.
+    faenas_seleccionadas: set de claves seleccionadas para actualizar; None = todas (muestra todos los avisos).
     """
     try:
         links = wb.LinkSources(1)  # 1 = xlExcelLinks
@@ -421,7 +454,9 @@ def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None):  # carpeta
                 subcarpeta = os.path.basename(str(carpeta_nueva)).lower()
                 if subcarpeta in link_norm:
                     patron = _PATRON_EXCEL_FAENA.get(clave, "")
-                    nueva_ruta = _buscar_excel_en_carpeta(str(carpeta_nueva), patron, clave)
+                    carpeta_fallback = (informes_dirs_fallback or {}).get(clave)
+                    es_silencioso = (faenas_seleccionadas is not None and clave not in faenas_seleccionadas)
+                    nueva_ruta = _buscar_excel_en_carpeta(str(carpeta_nueva), patron, clave, carpeta_fallback=carpeta_fallback, silencioso=es_silencioso)
                     clave_encontrada = clave
                     break
 
@@ -557,7 +592,7 @@ def _cerrar_wb_por_nombre(excel_app, ruta_objetivo, limpiar_cache=False):
         pass
 
 
-def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False, guardar_en_lugar=False):
+def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False, guardar_en_lugar=False, informes_dirs_fallback=None, faenas_seleccionadas=None):
     """
     Actualiza vínculos del Excel madre.
     - guardar_en_lugar=True  → sobreescribe el archivo actual con wb.Save() (modo Word existente).
@@ -580,7 +615,7 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
             print("  Usando Excel del usuario para actualizar vínculos.")
             excel_usuario.DisplayAlerts = False
             print("\nActualizando vínculos externos...")
-            actualizar_vinculos_faenas(wb_usuario, informes_dirs, carpeta_raiz=carpeta_raiz)
+            actualizar_vinculos_faenas(wb_usuario, informes_dirs, carpeta_raiz=carpeta_raiz, informes_dirs_fallback=informes_dirs_fallback, faenas_seleccionadas=faenas_seleccionadas)
             _refrescar_todos_los_vinculos(wb_usuario)
             if ordenar_sso:
                 print("\nOrdenando tablas SSO por fecha...")
@@ -615,7 +650,7 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
         state._workbooks_abiertos[ruta_excel] = wb
 
         print("\nActualizando vínculos externos...")
-        actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=carpeta_raiz)
+        actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=carpeta_raiz, informes_dirs_fallback=informes_dirs_fallback, faenas_seleccionadas=faenas_seleccionadas)
         _refrescar_todos_los_vinculos(wb)
         if ordenar_sso:
             print("\nOrdenando tablas SSO por fecha...")

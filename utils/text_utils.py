@@ -281,12 +281,12 @@ def limpiar_texto_global(texto):
   # normalizar tabulaciones a espacio simple
   texto = re.sub(r'\t+', ' ', texto)
 
-  # corregir formato de hora: "15: 00" → "15:00"
-  texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
-
   # asegurar un solo espacio después de ":"
   texto = re.sub(r":(?!\s)", ": ", texto)
   texto = re.sub(r":\s{2,}", ": ", texto)
+
+  # corregir formato de hora: "15: 00" → "15:00" (debe ir después de normalizar espacios)
+  texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
 
   # normalizar separadores decimales de coma a punto
   texto = normalizar_decimales(texto)

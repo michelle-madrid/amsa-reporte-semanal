@@ -766,8 +766,8 @@
           </div>
         </div>
 
-        <div class="path-field" data-seccion="sso">
-          <div class="pf-label">Excel indicadores<br><span style="font-weight:400; color:var(--gray-l);">(Base Datos SSO)</span></div>
+        <div class="path-field" data-seccion="sso-ind">
+          <div class="pf-label">Excel de Indicadores SSO</div>
           <div class="pf-right">
             <div class="browse-row">
               <input type="text" id="g_excel_ind" placeholder="— auto-detectado —">
@@ -930,6 +930,12 @@
 
       </div><!-- /coll-body -->
     </div><!-- /coll-wrap rutas -->
+
+    <div id="aviso_semana_anterior" style="display:none; margin-top:10px; margin-bottom:4px; padding:8px 12px;
+         background:#FFF8E6; border:1.5px solid var(--amber); border-radius:6px;
+         font-size:12px; color:#7A4F00;">
+      ⚠ Usando archivos de la <strong>semana anterior</strong> para: <span id="aviso_faenas"></span>
+    </div>
 
     <!-- Botón generar -->
     <div class="btn-row" style="margin-bottom:20px;">
@@ -1178,13 +1184,16 @@ function updateRutasVisibility() {
   document.querySelectorAll('#rutasBody .path-field[data-tipo="excel"]').forEach(row => {
     row.style.display = (activas.has(row.dataset.faena) || vinculos) ? '' : 'none';
   });
-  // Filas SSO (Excel indicadores + Excel SSO)
-  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso"]').forEach(row => {
-    row.style.display = ssoOk ? '' : 'none';
+  // Filas SSO: ambas siempre visibles (vínculos + indicadores)
+  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso-ind"]').forEach(row => {
+    row.style.display = '';
   });
-  // Fila Gestión Hídrica
+  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso"]').forEach(row => {
+    row.style.display = '';
+  });
+  // Fila Gestión Hídrica: siempre visible (vínculos)
   document.querySelectorAll('#rutasBody .path-field[data-seccion="gh"]').forEach(row => {
-    row.style.display = ghOk ? '' : 'none';
+    row.style.display = '';
   });
 }
 
@@ -1347,6 +1356,17 @@ async function fetchSemanaInfo() {
     }
     fillInput('g_exc_SSO', (j.excels_faena || {})['SSO']             || '', !!(j.excels_faena || {})['SSO']);
     fillInput('g_exc_GH',  (j.excels_faena || {})['Gestión Hídrica'] || '', !!(j.excels_faena || {})['Gestión Hídrica']);
+    // Aviso semana anterior
+    const fb = j.fallback_anterior || [];
+    const avisoEl = document.getElementById('aviso_semana_anterior');
+    if (avisoEl) {
+      if (fb.length > 0) {
+        document.getElementById('aviso_faenas').textContent = fb.join(', ');
+        avisoEl.style.display = '';
+      } else {
+        avisoEl.style.display = 'none';
+      }
+    }
   } catch(e) {
     fillInput('pathRaiz', '', false);
     const st = document.getElementById('pathRaiz_st');
@@ -1454,6 +1474,17 @@ async function fetchSemanaInfoConRaiz(raiz) {
     }
     fillInput('g_exc_SSO', (j.excels_faena || {})['SSO']             || '', !!(j.excels_faena || {})['SSO']);
     fillInput('g_exc_GH',  (j.excels_faena || {})['Gestión Hídrica'] || '', !!(j.excels_faena || {})['Gestión Hídrica']);
+    // Aviso semana anterior
+    const fb2 = j.fallback_anterior || [];
+    const avisoEl2 = document.getElementById('aviso_semana_anterior');
+    if (avisoEl2) {
+      if (fb2.length > 0) {
+        document.getElementById('aviso_faenas').textContent = fb2.join(', ');
+        avisoEl2.style.display = '';
+      } else {
+        avisoEl2.style.display = 'none';
+      }
+    }
   } catch(e) { /* servidor no disponible, ignorar */ }
 }
 

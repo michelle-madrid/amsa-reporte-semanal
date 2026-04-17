@@ -1,6 +1,7 @@
 """Punto de entrada para generar el informe semanal completo."""
 
 import os
+from datetime import date, timedelta
 
 from docx import Document
 from docx.shared import Pt, Cm, RGBColor
@@ -137,18 +138,27 @@ def _construir_doc(
     for run in p.runs:
         run.font.color.rgb = RGBColor(0x12, 0x6F, 0x7A)
 
-    # ── Aviso de información incompleta ───────────────────────────────
-    faenas_sin_texto = [c for c in ORDEN_OFICIAL if not informes.get(c)]
-    info_incompleta  = bool(faenas_sin_texto) or not incluir_sso or not incluir_gh
-    if info_incompleta:
-        partes = []
-        if faenas_sin_texto:
-            partes.append(f"Faenas: {', '.join(faenas_sin_texto)}")
-        if not incluir_sso:
-            partes.append("SSO")
-        if not incluir_gh:
-            partes.append("Gestión Hídrica")
-        aviso = f"[Información incompleta — pendiente: {'; '.join(partes)}]"
+    es_parcial = faenas_con_excel is not None
+
+    # ── Aviso de información incompleta (solo en modo generación completa) ─
+    if not es_parcial:
+        faenas_sin_texto = [c for c in ORDEN_OFICIAL if not informes.get(c)]
+        info_incompleta  = bool(faenas_sin_texto) or not incluir_sso or not incluir_gh
+        if info_incompleta:
+            partes = []
+            if faenas_sin_texto:
+                partes.append(f"Faenas: {', '.join(faenas_sin_texto)}")
+            if not incluir_sso:
+                partes.append("SSO")
+            if not incluir_gh:
+                partes.append("Gestión Hídrica")
+            aviso = f"[Información incompleta — pendiente: {'; '.join(partes)}]"
+        else:
+            aviso = None
+    else:
+        aviso = None  # En modo parcial no se generan disclaimers
+
+    if aviso:
         p_aviso = doc.add_paragraph(style="Normal AMSA")
         p_aviso.paragraph_format.space_before = Pt(0)
         p_aviso.paragraph_format.space_after  = Pt(10)
@@ -177,23 +187,18 @@ def _construir_doc(
     if INCLUIR_ESTADO_FASES_DESARROLLO:
         agregar_estado_fases_desarrollo(doc, excel_madre)
 
-    es_parcial = faenas_con_excel is not None
-
-    def _cache(nombre):
-        """Devuelve la ruta del PNG cacheado si existe, o None."""
-        ruta = os.path.join(r"C:\Temp", nombre)
-        return ruta if os.path.isfile(ruta) else None
-
     doc.add_page_break()
     agregar_titulo(doc, "Gestión Hídrica", nivel=2)
     if incluir_gh:
         img_hidrica = exportar_imagen_excel(excel_madre, "Gestión Hídrica", "A3:W20", "gestion_hidrica.png")
         agregar_imagen(doc, img_hidrica, 19, 3.24, "")
     elif es_parcial:
-        img_c = _cache("gestion_hidrica.png")
-        if img_c:
-            agregar_imagen(doc, img_c, 19, 3.24, "")
-            print("  → Gestión Hídrica: usando imagen previa (no solicitada)")
+        # Modo Word existente sin GH seleccionada: restaurar imagen del Word previo
+        img_cache = os.path.join(_TEMP, "gestion_hidrica.png")
+        if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
+            agregar_imagen(doc, img_cache, 19, 3.24, "")
+        else:
+            agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Gestión Hídrica: En espera de envío información")
@@ -219,13 +224,14 @@ def _construir_doc(
             agregar_imagen(doc, img_path, 19, 4.3)
             doc.add_paragraph()
     elif es_parcial:
-        for nombre_img, texto_titulo in [
+        # Modo Word existente sin SSO seleccionada: restaurar imágenes del Word previo
+        for img_name, texto_titulo in [
             ("valor_semanal.png", "Indicadores Valor Semanal"),
             ("valor_mensual.png", "Indicadores Valor Mensual"),
             ("valor_anual.png",   "Indicadores Valor Anual"),
         ]:
-            img_c = _cache(nombre_img)
-            if img_c:
+            img_cache = os.path.join(_TEMP, img_name)
+            if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
                 p_titulo = doc.add_paragraph()
                 p_titulo.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
                 run = p_titulo.add_run(texto_titulo)
@@ -233,9 +239,13 @@ def _construir_doc(
                 run.font.name = "Arial"
                 run.font.size = Pt(11)
                 doc.add_paragraph()
-                agregar_imagen(doc, img_c, 19, 4.3)
+                agregar_imagen(doc, img_cache, 19, 4.3)
                 doc.add_paragraph()
-        print("  → Accidentabilidad: usando imágenes previas (no solicitada)")
+        if not any(
+            os.path.exists(os.path.join(_TEMP, n))
+            for n in ("valor_semanal.png", "valor_mensual.png", "valor_anual.png")
+        ):
+            agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Accidentabilidad (SSO): En espera de envío información")
@@ -245,7 +255,8 @@ def _construir_doc(
         texto_compania = informes.get(clave, "")
         doc.add_page_break()
         agregar_titulo(doc, cfg["nombre"], nivel=1)
-        if not texto_compania:
+        es_seleccionada = (faenas_con_excel is None or clave in faenas_con_excel)
+        if not texto_compania or (not es_seleccionada and _MSG_PENDIENTE in texto_compania):
             agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
             continue
         procesador = PROCESADORES_FAENA.get(clave)
@@ -281,23 +292,63 @@ def _construir_doc(
             nombre_img = f"accidentabilidad_{i + 1}.png"
             wb_madre = _obtener_wb_madre()
             img_backup = exportar_imagen_sso_filtrada(excel_madre, wb_madre.Worksheets("SSO"), rango_tabla, nombre_img)
-            if i > 0:
-                doc.add_page_break()
-            agregar_imagen(doc, img_backup, 19, None, "")
+
+            # Calcular alto real de la imagen a 19 cm de ancho y limitarlo para que
+            # quepa en la página sin desbordarse:
+            #   i=0: comparte página con el título → max 24 cm
+            #   i>0: página propia               → max 26 cm
+            MAX_ALTO = 24.0 if i == 0 else 26.0
+            alto_cm = MAX_ALTO
+            try:
+                from PIL import Image as _PILImg
+                with _PILImg.open(img_backup) as _im:
+                    _w, _h = _im.size
+                if _w > 0:
+                    alto_cm = min(19.0 * _h / _w, MAX_ALTO)
+            except Exception:
+                pass
+
+            if i == 0:
+                # Primera imagen: va en la misma página que el título
+                agregar_imagen(doc, img_backup, 19, alto_cm, "")
+            else:
+                # Imágenes siguientes: nueva página usando page_break_before en el
+                # propio párrafo de imagen para evitar páginas vacías intermedias
+                if os.path.exists(img_backup) and os.path.getsize(img_backup) > 0:
+                    p = doc.add_paragraph()
+                    p.paragraph_format.page_break_before = True
+                    p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                    p.add_run().add_picture(img_backup, width=Cm(19), height=Cm(alto_cm))
+
         if rangos_tablas_sso:
             print(f"  ✓ Accidentabilidad Back-up: {len(rangos_tablas_sso)} tabla(s) exportada(s)")
     elif es_parcial:
-        i = 1
+        # Modo Word existente sin SSO seleccionada: restaurar imágenes del Word previo
+        i = 0
         while True:
-            img_c = _cache(f"accidentabilidad_{i}.png")
-            if not img_c:
+            img_cache = os.path.join(_TEMP, f"accidentabilidad_{i + 1}.png")
+            if not (os.path.exists(img_cache) and os.path.getsize(img_cache) > 0):
                 break
-            if i > 1:
-                doc.add_page_break()
-            agregar_imagen(doc, img_c, 19, None, "")
+            MAX_ALTO = 24.0 if i == 0 else 26.0
+            alto_cm = MAX_ALTO
+            try:
+                from PIL import Image as _PILImg
+                with _PILImg.open(img_cache) as _im:
+                    _w, _h = _im.size
+                if _w > 0:
+                    alto_cm = min(19.0 * _h / _w, MAX_ALTO)
+            except Exception:
+                pass
+            if i == 0:
+                agregar_imagen(doc, img_cache, 19, alto_cm, "")
+            else:
+                p = doc.add_paragraph()
+                p.paragraph_format.page_break_before = True
+                p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                p.add_run().add_picture(img_cache, width=Cm(19), height=Cm(alto_cm))
             i += 1
-        if i > 1:
-            print(f"  → Accidentabilidad Back-up: usando {i - 1} imagen(es) previa(s) (no solicitada)")
+        if i == 0:
+            agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Accidentabilidad Back-up (SSO): En espera de envío información")
@@ -309,6 +360,46 @@ def _construir_doc(
     doc.save(ruta_guardado)
     cerrar_excels()
     print(f"Informe generado en: {ruta_guardado}")
+
+
+def _construir_dirs_semana_anterior(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=None):
+    """Devuelve informes_dirs de la semana anterior buscando en disco por número de semana."""
+    try:
+        num_ant = max(1, int(num_semana) - 1)
+        rutas_actual = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
+        raiz_actual = Path(rutas_actual["raiz"])
+        # Buscar en el mismo directorio de mes
+        parent = raiz_actual.parent
+        prev = [f for f in parent.iterdir()
+                if f.is_dir() and f.name.startswith(f"{num_ant}_")] if parent.is_dir() else []
+        # Si no está en el mismo mes, recorrer todos los meses del año
+        if not prev:
+            year_dir = parent.parent
+            if year_dir.is_dir():
+                for mes_dir in year_dir.iterdir():
+                    if mes_dir.is_dir():
+                        prev += [f for f in mes_dir.iterdir()
+                                 if f.is_dir() and f.name.startswith(f"{num_ant}_")]
+        if not prev:
+            print(f"  ! Semana anterior ({num_ant}) no encontrada en disco — sin fallback")
+            return {}
+        raiz_ant = prev[0]
+        dirs = {
+            "MLP":  raiz_ant / "01 -MLP",
+            "CEN":  raiz_ant / "02 -CEN",
+            "ANT":  raiz_ant / "03 -ANT",
+            "CMZ":  raiz_ant / "04 -CMZ",
+            "FCAB": raiz_ant / "05 -FCAB",
+            "SSO":  raiz_ant / "06 -SSO",
+        }
+        gh = next((f for f in raiz_ant.iterdir()
+                   if f.is_dir() and f.name.startswith("07")), None) if raiz_ant.is_dir() else None
+        if gh:
+            dirs["Gestión Hídrica"] = gh
+        return dirs
+    except Exception as e:
+        print(f"  ! No se pudo construir fallback de semana anterior: {e}")
+        return {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -352,6 +443,9 @@ def actualizar_secciones_word(
         if clave_actual and buf:
             informes_previos[clave_actual] = "\n".join(buf)
 
+    # Encabezados de secciones no-faena que marcan el fin del bloque de una compañía
+    _SECCIONES_STOP = {_SECCION_GH, _SECCION_SSO, _SECCION_BACKUP}
+
     for p in doc_prev.paragraphs:
         t = p.text.strip()
         if not t:
@@ -359,6 +453,10 @@ def actualizar_secciones_word(
         if t in _N2K:
             _save_buf()
             clave_actual = _N2K[t]
+            buf = []
+        elif t in _SECCIONES_STOP:
+            _save_buf()
+            clave_actual = None
             buf = []
         elif clave_actual:
             buf.append(t)
@@ -392,11 +490,14 @@ def actualizar_secciones_word(
             if informes[clave]:
                 print(f"  → {clave}: mantenido del Word existente")
 
-    # ── Actualizar vínculos Excel — TODAS las faenas ──────────────────
+    # ── Actualizar vínculos Excel — TODAS las faenas + SSO + GH ──────────
     if actualizar_vinculos:
         rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
-        # Empezar con todos los dirs auto-detectados (no solo los seleccionados)
+        # Empezar con los dirs de las 5 faenas
         dirs_vinculos = dict(rutas["informes_dirs"])
+        # Incluir siempre SSO y Gestión Hídrica para actualizar sus vínculos
+        # (aunque no se hayan seleccionado para regenerar imágenes)
+        dirs_vinculos.update(rutas.get("excels_adicionales_dirs", {}))
         # Aplicar overrides del usuario: si proporcionó un archivo, tomar su carpeta padre;
         # si proporcionó una carpeta, usarla directamente.
         for clave, ruta_override in (excels_dirs_override or {}).items():
@@ -405,10 +506,20 @@ def actualizar_secciones_word(
             p = Path(ruta_override)
             dirs_vinculos[clave] = str(p.parent) if p.is_file() else str(p)
         if dirs_vinculos:
+            # Seleccionadas = faenas elegidas + SSO y GH si se pidió incluirlos
+            _seleccionadas = set(faenas_actualizar)
+            if incluir_sso:
+                _seleccionadas.add("SSO")
+            if incluir_gh:
+                _seleccionadas.add("Gestión Hídrica")
             abrir_excel_y_actualizar_vinculos(
                 excel_madre, dirs_vinculos, carpeta_destino=carpeta_destino,
-                ordenar_sso=True,   # siempre ordenar SSO cuando se actualizan todos
+                ordenar_sso=incluir_sso,
                 guardar_en_lugar=True,
+                informes_dirs_fallback=_construir_dirs_semana_anterior(
+                    num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco
+                ),
+                faenas_seleccionadas=_seleccionadas,
             )
 
     # ── Extraer imágenes del Word existente → C:\Temp\ con nombres canónicos ─
@@ -499,33 +610,38 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True, dis
     if MODO_DEBUG:
         rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
         excel_madre       = _resolver_archivo(rutas["excel_madre"], "Excel Base")
-        excel_indicadores = _resolver_unico_xlsx(rutas["excel_indicadores_dir"], "Excel de indicadores")
+        excel_indicadores = _resolver_unico_xlsx(rutas["excel_indicadores_dir"], "Excel de indicadores SSO") if incluir_sso else ""
         carpeta_destino   = rutas["carpeta_destino"] if Path(rutas["carpeta_destino"]).is_dir() else seleccionar_carpeta()
         nombre_final      = nombre_override or rutas["nombre_archivo"]
     else:
         excel_madre = seleccionar_archivo("Excel Base")
-        excel_indicadores = seleccionar_archivo("Excel de indicadores")
+        excel_indicadores = seleccionar_archivo("Excel de indicadores SSO") if incluir_sso else ""
         carpeta_destino = seleccionar_carpeta()
         nombre_final = nombre_override or input("\nEscribe el nombre del informe final: ")
 
     if MODO_DEBUG:
         informes_dirs = dict(rutas["informes_dirs"])
-        informes_dirs["SSO"] = rutas["excel_indicadores_dir"]
-        carpeta_raiz = Path(rutas["raiz"])
-        carpetas_07 = [f for f in carpeta_raiz.iterdir() if f.is_dir() and f.name.startswith("07")]
-        if carpetas_07:
-            informes_dirs["Gestión Hídrica"] = carpetas_07[0]
-        else:
-            print("  ! No se encontró subcarpeta '07...' para Gestión Hídrica")
+        # Incluir SSO y Gestión Hídrica para que sus vínculos también se actualicen
+        # y tengan fallback a la semana anterior si no se encuentran en la actual.
+        informes_dirs.update(rutas.get("excels_adicionales_dirs", {}))
 
         nombre_base = os.path.splitext(os.path.basename(excel_madre))[0]
         excel_madre_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx")
 
         actualizar = input("\n¿Deseas actualizar los vínculos del Excel? (s/n): ").strip().lower()
         if actualizar == "s":
+            _sel_gen = set(faenas_activas)
+            if incluir_sso:
+                _sel_gen.add("SSO")
+            if incluir_gh:
+                _sel_gen.add("Gestión Hídrica")
             abrir_excel_y_actualizar_vinculos(
                 excel_madre, informes_dirs, carpeta_destino=carpeta_destino,
                 ordenar_sso=incluir_sso,
+                informes_dirs_fallback=_construir_dirs_semana_anterior(
+                    num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco
+                ),
+                faenas_seleccionadas=_sel_gen,
             )
 
         if os.path.exists(excel_madre_act):

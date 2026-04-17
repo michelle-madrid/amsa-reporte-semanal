@@ -115,8 +115,8 @@ CONFIG_COMPANIAS = {
 }
 
 # Celdas exactas en el Excel madre donde leer la desviación (dif unidades, dif %) por KPI.
-# Columna E = desviación en unidades, Columna G = desviación porcentual.
-# Agregar entradas para ANT, CEN, CMZ, FCAB cuando se confirmen sus filas.
+# Columna E = desviación en unidades, F/G = desviación porcentual (varía por compañía).
+# Pendiente confirmar celdas para ANT, CEN, CMZ.
 CONFIG_CELDAS_DESVIACIONES = {
     "MLP": {
         # ── Mina ──────────────────────────────────────────────────────────────
@@ -206,6 +206,15 @@ CONFIG_CELDAS_DESVIACIONES = {
         "PLS":                      ("D59", "F59"),
         "Cobre Fino Producido":     ("D60", "F60"),
     },
+    "FCAB": {
+        # ── Tren ──────────────────────────────────────────────────────────────
+        "Transporte de ácido":          ("E25", "F25"),
+        "Transporte de Cobre":          ("E26", "F26"),
+        "Transporte de Concentrados":   ("E27", "F27"),
+        "Transporte Total de Tren":     ("E29", "F29"),
+        # ── Camión ────────────────────────────────────────────────────────────
+        "Transporte Total de Camión":   ("E34", "F34"),
+    },
 }
 
 # Define el orden esperado de subtítulos para las principales desviaciones por compañía.
@@ -291,6 +300,7 @@ CONFIG_HOJAS_ADICIONALES = {
 CONFIG_KPI_EXCLUIDOS = {
     "ANT": {"Pala", "Cargador", "Extracción a desarrollo"},
     "CEN": {"Fase", "Remanejo"},
+    "CMZ": {"Fase"},
     "MLP": {
         "En Planta Desaladora",
         "En términos de capacidad de impulsión",

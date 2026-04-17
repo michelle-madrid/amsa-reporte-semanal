@@ -89,6 +89,9 @@ PALABRAS_DOMINIO = {
     "pls", "mineralización", "yacimiento", "yacimientos",
     "sulfuros", "óxidos", "cátodo", "cátodos",
     "electroobtención", "electroextracción",
+    "atollo",               # "evento de atollo", "por atollo" — sustantivo técnico
+    # Símbolos químicos y metalúrgicos usados como sustantivos/modificadores
+    "cu",                   # "Cu fino", "Cu soluble" — símbolo del cobre
     # Términos técnicos inglés de uso corriente en minería
     "stockpile", "stock", "pile", "built", "as",   # "planos As Built", "stock pile"
     "overcut", "undercut", "drawpoint",
@@ -392,6 +395,9 @@ def revisar_gramatica(ruta_docx, faenas=None):
                 m_sig = re.match(r'\w+', resto)
                 if m_sig:
                     sig = m_sig.group(0).lower()
+                    # Si la palabra siguiente es de dominio (ej: "a chancado") → no es error
+                    if _es_dominio(sig):
+                        continue
                     _PARTICIPIOS_IRREG = {
                         "abierto", "vuelto", "puesto", "hecho", "dicho", "escrito",
                         "roto", "muerto", "visto", "resuelto", "disuelto",
