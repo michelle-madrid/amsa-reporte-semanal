@@ -817,6 +817,7 @@ def mlp_render_mina(doc, texto_compania, excel_madre=None):
   p_titulo = doc.add_paragraph(style="Normal AMSA")
   p_titulo.paragraph_format.space_before = Pt(6)
   p_titulo.paragraph_format.space_after = Pt(0)
+  p_titulo.paragraph_format.keep_with_next = True
 
   run_titulo = p_titulo.add_run("Mina:")
   run_titulo.bold = True
@@ -882,10 +883,11 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   contenido = [linea.strip() for linea in extraer_planta_desaladora(texto_compania) if linea.strip()]
   if not contenido:
     return
-  doc.add_paragraph("") 
+  doc.add_paragraph("")
   p = doc.add_paragraph("Planta Desaladora:", style="Normal AMSA")
   p.paragraph_format.space_before = Pt(6)
   p.paragraph_format.space_after = Pt(12)
+  p.paragraph_format.keep_with_next = True
 
   run = p.runs[0]
   run.bold = True
@@ -944,10 +946,11 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
   contenido = [linea.strip() for linea in extraer_gestión_hídrica(texto_compania) if linea.strip()]
   if not contenido:
     return
-  doc.add_paragraph("") 
+  doc.add_paragraph("")
   p = doc.add_paragraph("Gestión Hídrica:", style="Normal AMSA")
   p.paragraph_format.space_before = Pt(6)
   p.paragraph_format.space_after = Pt(12)
+  p.paragraph_format.keep_with_next = True
 
   run = p.runs[0]
   run.bold = True
@@ -1332,6 +1335,7 @@ def fcab_render_tren(doc, texto_compania, excel_madre=None):
   p.paragraph_format.space_after = Pt(6)
   p.paragraph_format.left_indent = Cm(0)
   p.paragraph_format.first_line_indent = Cm(0)
+  p.paragraph_format.keep_with_next = True
 
   run = p.add_run("Tren:")
   run.bold = True
@@ -1545,6 +1549,7 @@ def agregar_hechos_relevantes(doc, texto_compania, compania=None):
     p_titulo.paragraph_format.line_spacing = 1.0
     p_titulo.paragraph_format.space_before = Pt(0)
     p_titulo.paragraph_format.space_after = Pt(6)
+    p_titulo.paragraph_format.keep_with_next = True
 
     run_titulo = p_titulo.add_run(seccion["titulo"])
     run_titulo.bold = True

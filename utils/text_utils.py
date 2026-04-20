@@ -281,6 +281,8 @@ def limpiar_texto_global(texto):
   # normalizar tabulaciones a espacio simple
   texto = re.sub(r'\t+', ' ', texto)
 
+  # colapsar doble (o más) dos puntos antes de normalizar espaciado
+  texto = re.sub(r"::+", ":", texto)
   # asegurar un solo espacio después de ":"
   texto = re.sub(r":(?!\s)", ": ", texto)
   texto = re.sub(r":\s{2,}", ": ", texto)
@@ -325,7 +327,7 @@ def limpiar_texto_global(texto):
   # asegurar que las líneas de contenido terminen con . o :
   # Solo aplica a líneas con contenido real (tienen ": " = título + cuerpo), no a títulos sueltos
   texto = texto.rstrip()
-  if texto and texto[-1] not in (".", ":") and ": " in texto:
+  if texto and texto[-1] not in (".", ":", ",", ";") and ": " in texto:
     texto = texto + "."
 
   return texto

@@ -272,6 +272,7 @@ def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None):
             run.font.color.rgb = RGBColor(*color)
     p.space_before = Pt(12)
     p.space_after = Pt(6)
+    p.paragraph_format.keep_with_next = True
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
@@ -280,6 +281,8 @@ def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
     p.paragraph_format.line_spacing = 1.0
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(0)
+    if bold:
+        p.paragraph_format.keep_with_next = True
     for run in p.runs:
         if bold:
             run.bold = True
