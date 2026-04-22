@@ -327,7 +327,9 @@ def limpiar_texto_global(texto):
   # asegurar que las líneas de contenido terminen con . o :
   # Solo aplica a líneas con contenido real (tienen ": " = título + cuerpo), no a títulos sueltos
   texto = texto.rstrip()
-  if texto and texto[-1] not in (".", ":", ",", ";") and ": " in texto:
+  if texto and texto[-1] == ",":
+    texto = texto[:-1] + "."
+  elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
     texto = texto + "."
 
   return texto

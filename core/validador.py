@@ -208,7 +208,7 @@ def _leer_excel_por_etiqueta(wb_com, nombre_hoja, rango):
                 for n in _normalizar_excel(celda):
                     nums.add(n)
         if label_orig and nums:
-            tabla[_norm(label_orig)] = (label_orig, nums)
+            tabla[_norm(label_orig)] = (label_orig, nums, None)
 
     return tabla, None
 
@@ -218,26 +218,62 @@ def _leer_excel_por_etiqueta(wb_com, nombre_hoja, rango):
 def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
     """
     Lee las celdas exactas definidas en CONFIG_CELDAS_DESVIACIONES.
-    Cada KPI tiene (celda_dif, celda_pct) explícitas, p.ej. ("E39", "G39").
-    Devuelve ({norm_label: (label_orig, set_floats)}, error_str|None).
+    Cada KPI tiene (celda_dif, celda_pct) o (celda_dif, celda_pct, celda_status).
+    Devuelve ({norm_label: (label_orig, set_floats, status_or_None)}, error_str|None).
+    Auto-detecta el estado escaneando la fila si no se configura celda_status.
     """
     try:
         ws = wb_com.Worksheets(nombre_hoja)
     except Exception as e:
         return None, str(e)
 
+    _cache_filas = {}  # row_num → status_text normalizado
+
     tabla = {}
-    for label, (celda_dif, celda_pct) in celdas_config.items():
+    for label, cells in celdas_config.items():
+        celda_dif = cells[0]
+        celda_pct = cells[1] if len(cells) > 1 else None
+        celda_status_cfg = cells[2] if len(cells) > 2 else None
+
         nums = set()
-        for celda_a1 in (celda_dif, celda_pct):
+        for celda_a1 in filter(None, (celda_dif, celda_pct)):
             try:
                 v = ws.Range(celda_a1).Value
                 for n in _normalizar_excel(v):
                     nums.add(n)
             except Exception:
                 pass
+
+        status_excel = None
+        if celda_status_cfg:
+            try:
+                v = ws.Range(celda_status_cfg).Value
+                if isinstance(v, str) and _PAT_STATUS.search(v):
+                    status_excel = _norm(v.strip())
+            except Exception:
+                pass
+        elif celda_dif:
+            row_match = re.search(r'\d+', celda_dif)
+            if row_match:
+                row_num = row_match.group()
+                if row_num not in _cache_filas:
+                    try:
+                        rng = ws.Range(f"A{row_num}:Z{row_num}").Value
+                        found = None
+                        if rng:
+                            fila_vals = rng[0] if (isinstance(rng, (tuple, list))
+                                                   and isinstance(rng[0], (tuple, list))) else rng
+                            for cell_val in fila_vals:
+                                if isinstance(cell_val, str) and _PAT_STATUS.search(cell_val):
+                                    found = _norm(cell_val.strip())
+                                    break
+                        _cache_filas[row_num] = found
+                    except Exception:
+                        _cache_filas[row_num] = None
+                status_excel = _cache_filas[row_num]
+
         if nums:
-            tabla[_norm(label)] = (label, nums)
+            tabla[_norm(label)] = (label, nums, status_excel)
 
     return tabla, None
 
@@ -273,9 +309,13 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
         if not valores_raw:
             return {}, None
 
-        # 1. Buscar índices de columna "Dif" y "Var" en las primeras 4 filas
+        # 1. Buscar índices de columna "Dif", "Var" y estado en las primeras 4 filas
         idx_dif = None
         idx_pct = None
+        idx_status = None
+        _PAT_STATUS_HDR = re.compile(
+            r'(condici[oó]n|estado|vs[\s_]pm|evaluaci[oó]n)', re.IGNORECASE
+        )
         for fila in valores_raw[:4]:
             if not fila:
                 continue
@@ -286,10 +326,24 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
                         idx_dif = i
                     if idx_pct is None and ("var" in cs or cs == "%"):
                         idx_pct = i
+                    if idx_status is None and _PAT_STATUS_HDR.search(cs):
+                        idx_status = i
             if idx_dif is not None and idx_pct is not None:
                 break
 
-        # 2. Leer filas de datos leyendo SÓLO las columnas Dif y Var%
+        # Si no se halló columna de estado por encabezado, detectar por contenido
+        if idx_status is None:
+            for fila in valores_raw[4:12]:
+                if not fila:
+                    continue
+                for i, celda in enumerate(fila):
+                    if isinstance(celda, str) and _PAT_STATUS.search(celda):
+                        idx_status = i
+                        break
+                if idx_status is not None:
+                    break
+
+        # 2. Leer filas de datos leyendo SÓLO las columnas Dif, Var% y estado
         tabla = {}
         for fila in valores_raw:
             if not fila:
@@ -312,8 +366,14 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
                     for n in _normalizar_excel(fila[idx]):
                         nums.add(n)
 
+            status_excel = None
+            if idx_status is not None and idx_status < len(fila):
+                cell_s = fila[idx_status]
+                if isinstance(cell_s, str) and _PAT_STATUS.search(cell_s):
+                    status_excel = _norm(cell_s.strip())
+
             if nums:
-                tabla[_norm(label_orig)] = (label_orig, nums)
+                tabla[_norm(label_orig)] = (label_orig, nums, status_excel)
 
         return tabla, None
 
@@ -333,11 +393,15 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
     if not fila_inicio:
         return {}, None
 
-    # Identificar columnas Dif y Var% por encabezado
+    # Identificar columnas Dif, Var% y estado por encabezado
     col_dif = None
     col_pct = None
+    col_status = None
+    _PAT_STATUS_HDR2 = re.compile(
+        r'(condici[oó]n|estado|vs[\s_]pm|evaluaci[oó]n)', re.IGNORECASE
+    )
     for r in range(fila_inicio, min(fila_inicio + 4, max_r + 1)):
-        for c in range(col_label, min(col_label + 12, max_c + 1)):
+        for c in range(col_label, min(col_label + 14, max_c + 1)):
             v = ws.Cells(r, c).Value
             if v:
                 vs = str(v).strip().lower()
@@ -345,6 +409,8 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
                     col_dif = c
                 if col_pct is None and ("var" in vs or vs == "%"):
                     col_pct = c
+                if col_status is None and _PAT_STATUS_HDR2.search(vs):
+                    col_status = c
         if col_dif and col_pct:
             break
 
@@ -373,8 +439,14 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
             for n in _normalizar_excel(ws.Cells(r, col).Value):
                 nums.add(n)
 
+        status_excel = None
+        if col_status:
+            cell_s = ws.Cells(r, col_status).Value
+            if isinstance(cell_s, str) and _PAT_STATUS.search(cell_s):
+                status_excel = _norm(cell_s.strip())
+
         if nums:
-            tabla[label_norm] = (v_label.strip(), nums)
+            tabla[label_norm] = (v_label.strip(), nums, status_excel)
 
     return tabla, None
 
@@ -417,7 +489,7 @@ def _agregar_acumulados_desde_excel(wb_com, nombre_hoja, tabla):
                         if f is not None:
                             nums.add(round(f, 4))  # conserva signo
                     if nums:
-                        tabla[clave] = (celda.strip()[:80], nums)  # signed
+                        tabla[clave] = (celda.strip()[:80], nums, None)  # signed
                         pendientes[clave] = True
         if all(v is not None for v in pendientes.values()):
             break
@@ -437,25 +509,25 @@ def _buscar_fila(label_word_norm, tabla):
          y 'Molibdeno' ↔ 'Molibdeno fino pagable'
     En caso de múltiples candidatos se prefiere el de mayor solapamiento
     y, en empate, el label Excel más largo (más específico).
-    Devuelve (label_orig_excel, set_floats) o (None, None).
+    Devuelve (label_orig_excel, set_floats, status_or_None) o (None, None, None).
     """
     if label_word_norm in tabla:
         return tabla[label_word_norm]
 
     # ── Estrategia 2: substring ───────────────────────────────────────────────
     candidatos = [
-        (excel_norm, orig, nums)
-        for excel_norm, (orig, nums) in tabla.items()
+        (excel_norm, orig, nums, status)
+        for excel_norm, (orig, nums, status) in tabla.items()
         if label_word_norm in excel_norm or excel_norm in label_word_norm
     ]
     if candidatos:
         candidatos.sort(key=lambda x: len(x[0]), reverse=True)
-        return candidatos[0][1], candidatos[0][2]
+        return candidatos[0][1], candidatos[0][2], candidatos[0][3]
 
     # ── Estrategia 3: solapamiento por conjunto de palabras ───────────────────
     words_w = set(label_word_norm.split())
     candidatos_ws = []
-    for excel_norm, (orig, nums) in tabla.items():
+    for excel_norm, (orig, nums, status) in tabla.items():
         words_e = set(excel_norm.split())
         intersec = words_w & words_e
         union    = words_w | words_e
@@ -464,13 +536,13 @@ def _buscar_fila(label_word_norm, tabla):
         ratio = len(intersec) / len(union)
         # Acepta: mismo conjunto (reordenado) o uno es subconjunto del otro
         if words_w == words_e or words_w <= words_e or words_e <= words_w:
-            candidatos_ws.append((ratio, len(excel_norm), orig, nums))
+            candidatos_ws.append((ratio, len(excel_norm), orig, nums, status))
 
     if not candidatos_ws:
-        return None, None
+        return None, None, None
 
     candidatos_ws.sort(key=lambda x: (x[0], x[1]), reverse=True)
-    return candidatos_ws[0][2], candidatos_ws[0][3]
+    return candidatos_ws[0][2], candidatos_ws[0][3], candidatos_ws[0][4]
 
 
 # ── Captura de líneas de producción ──────────────────────────────────────────
@@ -550,6 +622,12 @@ def _truncar_en_status(linea):
     return linea[:m.start()] if m else linea
 
 
+def _extraer_status_word(linea):
+    """Extrae el estado Word normalizado ('bajo pm', 'sobre pm', 'en linea') o None."""
+    m = _PAT_STATUS.search(linea)
+    return _norm(m.group(0)) if m else None
+
+
 # ── Comparar y reportar ───────────────────────────────────────────────────────
 
 def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
@@ -608,16 +686,16 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
             elif re.match(r'^acumulado al an', label_norm):
                 label_norm = "acumulado al ano"
             # Buscar con sufijo de contexto primero, luego sin él
-            excel_label, nums_fila = None, None
+            excel_label, nums_fila, status_excel = None, None, None
             if contexto_suffix:
-                excel_label, nums_fila = _buscar_fila(
+                excel_label, nums_fila, status_excel = _buscar_fila(
                     label_norm + " " + contexto_suffix.lower(), tabla_excel
                 )
             if not excel_label:
-                excel_label, nums_fila = _buscar_fila(label_norm, tabla_excel)
+                excel_label, nums_fila, status_excel = _buscar_fila(label_norm, tabla_excel)
             es_acumulado = label_norm in ("acumulado al mes", "acumulado al ano")
         else:
-            excel_label, nums_fila = None, None
+            excel_label, nums_fila, status_excel = None, None, None
             es_acumulado = False
 
         if excel_label:
@@ -641,6 +719,22 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
                     "word": raw, "excel": cercano, "ok": ok,
                     "dif": round(abs(v_abs - abs(cercano)), 4) if not ok and cercano is not None else None,
                 })
+
+            # Validar indicador de estado (bajo PM / sobre PM / en línea)
+            status_word = _extraer_status_word(linea)
+            if status_word and status_excel:
+                status_ok = status_word == status_excel
+                marca_s = "✓" if status_ok else "✗"
+                if status_ok:
+                    print(f"      {'estado':>14}  →  {marca_s}  '{status_word}'")
+                else:
+                    print(f"      {'estado':>14}  →  {marca_s}  Word='{status_word}'  Excel='{status_excel}'")
+                    n_warn += 1
+                    kpi["estado"] = "revisar"
+                kpi["status"] = {"word": status_word, "excel": status_excel, "ok": status_ok}
+            elif status_word and not status_excel:
+                print(f"      {'estado':>14}  →  ?  Word='{status_word}' (sin estado en Excel)")
+                kpi["status"] = {"word": status_word, "excel": None, "ok": None}
         elif label_word:
             print(f"      ⚠ Sin celda Excel para: '{label_word}'")
             n_sin_fila += 1

@@ -485,6 +485,12 @@
     min-width: 28px;
   }
   .kpi-extra { font-size: 11px; color: var(--gray-l); padding-top: 2px; }
+  .kpi-status { display: flex; align-items: center; gap: 5px; margin-top: 3px;
+                font-family: "Consolas","Courier New",monospace; font-size: 11px; }
+  .kpi-status .kpi-val-lbl { min-width: 46px; }
+  .kpi-status-ok   { color: var(--ok); }
+  .kpi-status-warn { color: var(--err); font-weight: 700; }
+  .kpi-status-unk  { color: #CBD5E0; }
 </style>
 </head>
 <body>
@@ -2081,9 +2087,23 @@ function renderResultados(secciones, container) {
         valsHtml = `<div class="kpi-vals">${partes}</div>`;
       }
 
+      // Indicador de estado (bajo PM / sobre PM / en línea)
+      let statusHtml = '';
+      if (k.status) {
+        const s = k.status;
+        const lbl = '<span class="kpi-val-lbl">estado</span>';
+        if (s.ok === true) {
+          statusHtml = `<div class="kpi-status"><span class="kpi-status-ok">${lbl}✓ '${_esc(s.word)}'</span></div>`;
+        } else if (s.ok === false) {
+          statusHtml = `<div class="kpi-status"><span class="kpi-status-warn">${lbl}✗ Word '${_esc(s.word)}' ≠ Excel '${_esc(s.excel)}'</span></div>`;
+        } else {
+          statusHtml = `<div class="kpi-status"><span class="kpi-status-unk">${lbl}? Word '${_esc(s.word)}' (sin estado en Excel)</span></div>`;
+        }
+      }
+
       return `<div class="kpi-row ${k.estado}" data-estado="${k.estado}">
         <div class="kpi-icon">${icon}</div>
-        <div>${label}${valsHtml}</div>
+        <div>${label}${valsHtml}${statusHtml}</div>
         <div class="kpi-extra">${k.excel_label && k.excel_label !== k.label ? _esc(k.excel_label) : ''}</div>
       </div>`;
     }).join('');
