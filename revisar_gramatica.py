@@ -89,6 +89,9 @@ PALABRAS_DOMINIO = {
     "pls", "mineralización", "yacimiento", "yacimientos",
     "sulfuros", "óxidos", "cátodo", "cátodos",
     "electroobtención", "electroextracción",
+    "atollo",               # "evento de atollo", "por atollo" — sustantivo técnico
+    # Símbolos químicos y metalúrgicos usados como sustantivos/modificadores
+    "cu",                   # "Cu fino", "Cu soluble" — símbolo del cobre
     # Términos técnicos inglés de uso corriente en minería
     "stockpile", "stock", "pile", "built", "as",   # "planos As Built", "stock pile"
     "overcut", "undercut", "drawpoint",
@@ -341,13 +344,14 @@ def revisar_gramatica(ruta_docx, faenas=None):
 
         nueva = detectar_compania(texto)
         if nueva:
-            compania_actual = nueva
-            # Extraer clave del formato "MLP – Los Pelambres"
-            compania_clave_actual = nueva.split(" – ")[0].strip()
-            # Mostrar cabecera solo si vamos a revisar esta sección
-            if faenas_set is None or compania_clave_actual in faenas_set:
-                print(f"── {compania_actual}")
-                _flush()
+            if nueva != compania_actual:
+                compania_actual = nueva
+                # Extraer clave del formato "MLP – Los Pelambres"
+                compania_clave_actual = nueva.split(" – ")[0].strip()
+                # Mostrar cabecera solo si vamos a revisar esta sección
+                if faenas_set is None or compania_clave_actual in faenas_set:
+                    print(f"── {compania_actual}")
+                    _flush()
             continue
 
         # Saltar párrafos de secciones no seleccionadas
@@ -391,6 +395,9 @@ def revisar_gramatica(ruta_docx, faenas=None):
                 m_sig = re.match(r'\w+', resto)
                 if m_sig:
                     sig = m_sig.group(0).lower()
+                    # Si la palabra siguiente es de dominio (ej: "a chancado") → no es error
+                    if _es_dominio(sig):
+                        continue
                     _PARTICIPIOS_IRREG = {
                         "abierto", "vuelto", "puesto", "hecho", "dicho", "escrito",
                         "roto", "muerto", "visto", "resuelto", "disuelto",
@@ -403,10 +410,15 @@ def revisar_gramatica(ruta_docx, faenas=None):
                         continue
 
             sugerencias = ", ".join(sugs) if sugs else "—"
+            ctx_ini = max(0, offset - 40)
+            ctx_fin = min(len(texto), offset + longitud + 40)
+            prefijo = ("…" if ctx_ini > 0 else "") + texto[ctx_ini:offset]
+            sufijo  = texto[offset + longitud:ctx_fin] + ("…" if ctx_fin < len(texto) else "")
+            contexto = f'{prefijo}[{fragmento}]{sufijo}'
             errores_parrafo.append((
                 f"{regla_id} [{cat_name}]",
                 mensaje,
-                f'  "{fragmento}"  →  {sugerencias}',
+                f'  "{contexto}"  →  {sugerencias}',
             ))
 
         if errores_parrafo:

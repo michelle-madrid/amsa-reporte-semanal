@@ -109,7 +109,7 @@ def clasificar_subtitulo_cmz_planta(texto):
   if "remanejo ripios" in t:
     return "Remanejo Ripios"
 
-  if t == "pls" or t.startswith("pls ") or " pls " in f" {t} ":
+  if re.match(r'^pls\b', t):
     return "PLS"
 
   if "cobre fino producido" in t:
@@ -281,12 +281,14 @@ def limpiar_texto_global(texto):
   # normalizar tabulaciones a espacio simple
   texto = re.sub(r'\t+', ' ', texto)
 
-  # corregir formato de hora: "15: 00" → "15:00"
-  texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
-
+  # colapsar doble (o más) dos puntos antes de normalizar espaciado
+  texto = re.sub(r"::+", ":", texto)
   # asegurar un solo espacio después de ":"
   texto = re.sub(r":(?!\s)", ": ", texto)
   texto = re.sub(r":\s{2,}", ": ", texto)
+
+  # corregir formato de hora: "15: 00" → "15:00" (debe ir después de normalizar espacios)
+  texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
 
   # normalizar separadores decimales de coma a punto
   texto = normalizar_decimales(texto)
@@ -325,7 +327,9 @@ def limpiar_texto_global(texto):
   # asegurar que las líneas de contenido terminen con . o :
   # Solo aplica a líneas con contenido real (tienen ": " = título + cuerpo), no a títulos sueltos
   texto = texto.rstrip()
-  if texto and texto[-1] not in (".", ":") and ": " in texto:
+  if texto and texto[-1] == ",":
+    texto = texto[:-1] + "."
+  elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
     texto = texto + "."
 
   return texto

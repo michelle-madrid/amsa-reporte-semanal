@@ -115,84 +115,105 @@ CONFIG_COMPANIAS = {
 }
 
 # Celdas exactas en el Excel madre donde leer la desviación (dif unidades, dif %) por KPI.
-# Columna E = desviación en unidades, Columna G = desviación porcentual.
-# Agregar entradas para ANT, CEN, CMZ, FCAB cuando se confirmen sus filas.
+# Columna E = desviación en unidades, F/G = desviación porcentual (varía por compañía).
+# Pendiente confirmar celdas para ANT, CEN, CMZ.
 CONFIG_CELDAS_DESVIACIONES = {
     "MLP": {
         # ── Mina ──────────────────────────────────────────────────────────────
-        "Movimiento Mina":          ("E39", "G39"),
-        "Extracción":               ("E40", "G40"),
-        "Extracción Lastre":        ("E41", "G41"),
-        "Extracción Mineral":       ("E42", "G42"),
-        "Remanejo":                 ("E43", "G43"),
+        "Movimiento Mina":          ("E39", "G39", "H39"),
+        "Extracción":               ("E40", "G40", "H40"),
+        "Extracción Lastre":        ("E41", "G41", "H41"),
+        "Extracción Mineral":       ("E42", "G42", "H42"),
+        "Remanejo":                 ("E43", "G43", "H43"),
         # ── Concentradora (fila 44 = cabecera de sección) ─────────────────────
-        "Mineral Procesado":        ("E45", "G45"),
-        "Ley Cu":                   ("E46", "G46"),
-        "Recuperación Cu":          ("E47", "G47"),
-        "Cu Fino Producido":        ("E48", "G48"),
-        "Concentrado Producido":    ("E49", "G49"),
-        "Concentrado Filtrado":     ("E50", "G50"),
-        "Cu Fino Pagable Filtrado": ("E51", "G51"),
-        "Molibdeno fino pagable":   ("E52", "G52"),
-        "Arenas Depositadas":       ("E53", "G53"),
-        "Arenas Compactadas":       ("E54", "G54"),
+        "Mineral Procesado":        ("E45", "G45", "H45"),
+        "Ley Cu":                   ("E46", "G46", "H46"),
+        "Recuperación Cu":          ("E47", "G47", "H47"),
+        "Cu Fino Producido":        ("E48", "G48", "H48"),
+        "Concentrado Producido":    ("E49", "G49", "H49"),
+        "Concentrado Filtrado":     ("E50", "G50", "H50"),
+        "Cu Fino Filtrado Pagable": ("E51", "G51", "H51"),
+        "Molibdeno":               ("E52", "G52", "H52"),
+        "Arenas Depositadas":       ("E53", "G53", "H53"),
+        "Arenas Compactadas":       ("E54", "G54", "H54"),
     },
     "ANT": {
         # ── Mina ──────────────────────────────────────────────────────────────
-        "Movimiento Mina":              ("D50", "F50"),
-        "Extracción Mina":              ("D51", "F51"),
-        "Extracción Mineral":           ("D52", "F52"),
-        "Extracción Lastre":            ("D53", "F53"),
-        "Remanejo":                     ("D54", "F54"),
+        "Movimiento Mina":              ("D50", "F50", "G50"),
+        "Extracción Mina":              ("D51", "F51", "G51"),
+        "Extracción Mineral":           ("D52", "F52", "G52"),
+        "Extracción Lastre":            ("D53", "F53", "G53"),
+        "Remanejo":                     ("D54", "F54", "G54"),
         # ── Mina (Fases) — encabezados de sección ─────────────────────────────
-        "Extracción de Mineral":        ("D56", "F56"),
-        "Extracción de Lastre":         ("D62", "F62"),
+        "Extracción de Mineral":        ("D56", "F56", "G56"),
+        "Extracción de Lastre":         ("D62", "F62", "G62"),
         # ── Planta ────────────────────────────────────────────────────────────
-        "Mineral Apilado":              ("D68", "F68"),
-        "Mineral Beneficiado":          ("D69", "F69"),
-        "Ley Cu":                       ("D70", "F70"),
-        "Recuperación Cu Beneficiado":  ("D71", "F71"),
-        "Descarga de Ripios":           ("D72", "F72"),
-        "Cobre Fino Producido":         ("D73", "F73"),
+        "Mineral Apilado":              ("D68", "F68", "G68"),
+        "Mineral Beneficiado":          ("D69", "F69", "G69"),
+        "Ley Cu":                       ("F70", "F70", "G70"),
+        "Recuperación Cu":              ("F71", "F71", "G71"),
+        "Descarga de Ripios":           ("D72", "F72", "G72"),
+        "Cobre Fino Producido":         ("D73", "F73", "G73"),
     },
     "CEN": {
         # ── Mina ──────────────────────────────────────────────────────────────
-        "Movimiento Mina":                          ("D91",  "F91"),
-        "Movimiento en Rajo Tesoro":                ("D92",  "F92"),
-        "Movimiento en Rajo Esperanza":             ("D96",  "F96"),
-        "Movimiento en Rajo Óxido Encuentro":       ("D100", "F100"),
-        "Movimiento en Rajo Esperanza Sur:":        ("D102", "F102"),
-        "Movimiento en Rajo Encuentro Sulfuros":    ("D107", "F107"),
+        "Movimiento Mina":                          ("D91",  "F91",  "G91"),
+        "Movimiento en Rajo Tesoro":                ("D92",  "F92",  "G92"),
+        "Movimiento en Rajo Esperanza":             ("D96",  "F96",  "G96"),
+        "Movimiento en Rajo Óxido Encuentro":       ("D100", "F100", "G100"),
+        "Movimiento en Rajo Esperanza Sur:":        ("D102", "F102", "G102"),
+        "Movimiento en Rajo Encuentro Sulfuros":    ("D107", "F107", "G107"),
         # ── Sulfuros ──────────────────────────────────────────────────────────
-        "Mineral Procesado":                        ("D112", "F112"),
-        "Ley Cu":                                   ("D113", "F113"),
-        "Recuperación Cu":                          ("D114", "F114"),
-        "Cu Fino Producido":                        ("D115", "F115"),
-        "Concentrado Filtrado":                     ("D116", "F116"),
-        "Cu Fino Pagable Filtrada":                 ("D117", "F117"),
-        "Recuperación Au":                          ("D119", "F119"),
-        "Au Fino Pagable Filtrada":                 ("D120", "F120"),
-        "Molibdeno Fino Pagable":                   ("D121", "F121"),
+        "Mineral Procesado":                        ("D112", "F112", "G112"),
+        "Ley Cu":                                   ("D113", "F113", "G113"),
+        "Recuperación Cu":                          ("D114", "F114", "G114"),
+        "Cu Fino Producido":                        ("D115", "F115", "G115"),
+        "Concentrado Filtrado":                     ("D116", "F116", "G116"),
+        "Cu Fino Pagable Filtrado":                 ("D117", "F117", "G117"),
+        "Ley Au":                                   ("F118", "F118", "G118"),
+        "Recuperación Au":                          ("D119", "F119", "G119"),
+        "Au Fino Pagable Filtrado":                 ("D120", "F120", "G120"),
+        "Mo Fino Pagable Filtrado":                 ("D121", "F121", "G121"),
         # ── Cátodos ───────────────────────────────────────────────────────────
-        "Producción Total de Cátodos de Cu":        ("D123", "F123"),
+        "Producción Total de Cátodos de Cu":        ("D123", "F123", "G123"),
+        # ── Cátodos — Planta Hidro MET ────────────────────────────────────────
+        "Producción de Cátodos de Cu MET":          ("D125", "F125", "G125"),
+        "Mineral Apilado MET":                      ("D126", "F126", "G126"),
+        "Mineral Beneficiado MET":                  ("D127", "F127", "G127"),
+        "Ley de Cu MET":                            ("F128", "F128", "G128"),
+        "Producción de ROM":                        ("D130", "F130", "G130"),
+        # ── Cátodos — Planta Hidro OXE ────────────────────────────────────────
+        "Producción de Cátodos de Cu OXE":          ("D132", "F132", "G132"),
+        "Mineral Apilado OXE":                      ("D133", "F133", "G133"),
+        "Mineral Beneficiado OXE":                  ("D134", "F134", "G134"),
+        "Ley de Cu OXE":                            ("F135", "F135", "G135"),
     },
     "CMZ": {
         # ── Mina ──────────────────────────────────────────────────────────────
-        "Movimiento Mina":          ("D41", "F41"),
-        "Extracción":               ("D42", "F42"),
-        "Extracción Mineral":       ("D48", "F48"),
-        "Extracción Lastre":        ("D49", "F49"),
-        "Remanejo":                 ("D50", "F50"),
+        "Movimiento Mina":          ("D41", "F41", "G41"),
+        "Extracción":               ("D42", "F42", "G42"),
+        "Extracción Mineral":       ("D48", "F48", "G48"),
+        "Extracción Lastre":        ("D49", "F49", "G49"),
+        "Remanejo":                 ("D50", "F50", "G50"),
         # ── Planta ────────────────────────────────────────────────────────────
-        "Mineral Apilado HL":       ("D52", "F52"),
-        "Mineral Beneficiado HL":   ("D53", "F53"),
-        "Ley Apilado HL TCu":       ("D54", "F54"),
-        "Mineral Apilado DL":       ("D55", "F55"),
-        "Mineral Beneficiado DL":   ("D56", "F56"),
-        "Ley Apilado DL TCu":       ("D57", "F57"),
-        "Remanejo Ripios":          ("D58", "F58"),
-        "PLS":                      ("D59", "F59"),
-        "Cobre Fino Producido":     ("D60", "F60"),
+        "Mineral Apilado HL":       ("D52", "F52", "G52"),
+        "Mineral Beneficiado HL":   ("D53", "F53", "G53"),
+        "Ley Apilado HL TCu":       ("D54", "F54", "G54"),
+        "Mineral Apilado DL":       ("D55", "F55", "G55"),
+        "Mineral Beneficiado DL":   ("D56", "F56", "G56"),
+        "Ley Apilado DL TCu":       ("D57", "F57", "G57"),
+        "Remanejo Ripios":          ("D58", "F58", "G58"),
+        "PLS":                      ("D59", "F59", "G59"),
+        "Cobre Fino Producido":     ("D60", "F60", "G60"),
+    },
+    "FCAB": {
+        # ── Tren ──────────────────────────────────────────────────────────────
+        "Transporte de ácido":          ("E25", "F25", "G25"),
+        "Transporte de Cobre":          ("E26", "F26", "G26"),
+        "Transporte de Concentrados":   ("E27", "F27", "G27"),
+        "Transporte Total de Tren":     ("E29", "F29", "G29"),
+        # ── Camión ────────────────────────────────────────────────────────────
+        "Transporte Total de Camión":   ("E34", "F34", "G34"),
     },
 }
 
@@ -272,6 +293,38 @@ CONFIG_HOJAS_ADICIONALES = {
         "rango": "A3:W20",
         "compania_fuente": "MLP",
     }
+}
+
+# KPIs cuyo label empieza con alguno de estos prefijos deben ignorarse en la validación.
+# Comparación normalizada (sin tildes, minúsculas).
+CONFIG_KPI_PREFIJOS_EXCLUIDOS = {
+    "FCAB": {"minera"},
+}
+
+# KPIs que deben ignorarse en la validación por compañía (el label es exactamente
+# como aparece en el Word, comparación normalizada — sin tildes, minúsculas).
+CONFIG_KPI_EXCLUIDOS = {
+    "ANT": {"Pala", "Cargador", "Extracción a desarrollo"},
+    "CEN": {"Fase", "Remanejo"},
+    "CMZ": {"Fase"},
+    "MLP": {
+        "En Planta Desaladora",
+        "En términos de capacidad de impulsión",
+        "Agua Continental Consumida",
+        "Recirculación Mauro a Planta",
+        "Intensidad de Uso de Agua en Planta",
+    },
+}
+
+# Subtítulos que marcan un cambio de contexto dentro de la sección de una compañía.
+# Cuando el validador encuentra una de estas líneas actualiza el sufijo de contexto,
+# que se añade al label al buscar en CONFIG_CELDAS_DESVIACIONES.
+# Formato: { "CLAVE": { "Texto del subtítulo": "SUFIJO" } }
+CONFIG_SUBSECCIONES_CONTEXTO = {
+    "CEN": {
+        "Planta Hidro MET": "MET",
+        "Planta Hidro OXE": "OXE",
+    },
 }
 
 # Guarda la ruta de la plantilla Word usada para construir el informe final.

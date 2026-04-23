@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import utils.excel_utils; import main\")"
+    ]
+  }
+}

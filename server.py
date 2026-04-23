@@ -100,12 +100,48 @@ def api_semana_info():
         from config import construir_rutas_semana
         from utils.excel_utils import _PATRON_EXCEL_FAENA
 
+        from datetime import date, timedelta
+
         disco = d.get("disco") or None
         rutas = construir_rutas_semana(
             d["num_semana"], d["dia_inicio"], d["mes_inicio"],
             d["dia_fin"],    d["mes_fin"],    d["year"],
             disco=disco,
         )
+
+        # Buscar carpeta de semana anterior en disco (más robusto que calcular fechas)
+        dirs_ant = {}
+        try:
+            num_ant = max(1, int(d["num_semana"]) - 1)
+            raiz_actual = Path(rutas["raiz"])
+            # Buscar en el mismo directorio de mes
+            _parent = raiz_actual.parent
+            _prev = [f for f in _parent.iterdir()
+                     if f.is_dir() and f.name.startswith(f"{num_ant}_")] if _parent.is_dir() else []
+            # Si no está en el mismo mes, recorrer todos los meses del año
+            if not _prev:
+                _year_dir = _parent.parent
+                if _year_dir.is_dir():
+                    for _mes_dir in _year_dir.iterdir():
+                        if _mes_dir.is_dir():
+                            _prev += [f for f in _mes_dir.iterdir()
+                                      if f.is_dir() and f.name.startswith(f"{num_ant}_")]
+            if _prev:
+                _raiz_ant = _prev[0]
+                dirs_ant = {
+                    "MLP":  _raiz_ant / "01 -MLP",
+                    "CEN":  _raiz_ant / "02 -CEN",
+                    "ANT":  _raiz_ant / "03 -ANT",
+                    "CMZ":  _raiz_ant / "04 -CMZ",
+                    "FCAB": _raiz_ant / "05 -FCAB",
+                    "SSO":  _raiz_ant / "06 -SSO",
+                }
+                _gh = next((f for f in _raiz_ant.iterdir()
+                            if f.is_dir() and f.name.startswith("07")), None) if _raiz_ant.is_dir() else None
+                if _gh:
+                    dirs_ant["Gestión Hídrica"] = _gh
+        except Exception as e:
+            print(f"  ! No se pudo determinar carpeta semana anterior: {e}")
 
         # Si el usuario eligió la carpeta manualmente, usarla como raíz
         raiz_override = (d.get("raiz_override") or "").strip()
@@ -133,21 +169,31 @@ def api_semana_info():
 
         raiz        = Path(rutas["raiz"])
         excel_madre = Path(rutas["excel_madre"])
-        ind_dir     = Path(rutas["excel_indicadores_dir"])
-
-        # Excel indicadores: buscar BDatos*.xlsx
-        cands_ind = list(ind_dir.glob("BDatos*.xlsx")) if ind_dir.is_dir() else []
-        excel_ind = str(cands_ind[0]) if len(cands_ind) == 1 else ""
+        # Preferir la versión _act si existe (generada al actualizar vínculos)
+        excel_madre_act = excel_madre.parent / (excel_madre.stem + "_act.xlsx")
+        if excel_madre_act.is_file():
+            excel_madre = excel_madre_act
+        ind_dir = Path(rutas["excel_indicadores_dir"])
 
         # Informes Word por faena
-        informes     = {}
-        excels_faena = {}
+        informes          = {}
+        excels_faena      = {}
+        fallback_anterior = []   # claves cuyos archivos vienen de la semana anterior
 
         for clave, sub in rutas["informes_dirs"].items():
             sub = Path(sub)
-            # Word
+            # Word — semana actual
             docxs = [f for f in sub.glob("*.docx") if not f.name.startswith("~$")] if sub.is_dir() else []
             informes[clave] = str(docxs[0]) if len(docxs) == 1 else ""
+            # Word — fallback semana anterior
+            if not informes[clave]:
+                sub_ant = Path(dirs_ant[clave]) if clave in dirs_ant else None
+                if sub_ant and sub_ant.is_dir():
+                    docxs_ant = [f for f in sub_ant.glob("*.docx") if not f.name.startswith("~$")]
+                    if len(docxs_ant) == 1:
+                        informes[clave] = str(docxs_ant[0])
+                        if clave not in fallback_anterior:
+                            fallback_anterior.append(clave)
             # Excel vinculado (faenas principales)
             patron = _PATRON_EXCEL_FAENA.get(clave, "").lower()
             if patron and sub.is_dir():
@@ -156,6 +202,16 @@ def api_semana_info():
                 excels_faena[clave] = str(cands[0]) if len(cands) == 1 else ""
             else:
                 excels_faena[clave] = ""
+            # Excel — fallback semana anterior
+            if not excels_faena[clave] and patron:
+                sub_ant = Path(dirs_ant[clave]) if clave in dirs_ant else None
+                if sub_ant and sub_ant.is_dir():
+                    cands_ant = [f for f in sub_ant.glob("*.xlsx")
+                                 if not f.name.startswith("~$") and patron in f.name.lower()]
+                    if len(cands_ant) == 1:
+                        excels_faena[clave] = str(cands_ant[0])
+                        if clave not in fallback_anterior:
+                            fallback_anterior.append(clave)
 
         # Excels adicionales: SSO y Gestión Hídrica
         for clave, adir in rutas.get("excels_adicionales_dirs", {}).items():
@@ -167,6 +223,28 @@ def api_semana_info():
                 excels_faena[clave] = str(cands[0]) if len(cands) == 1 else ""
             else:
                 excels_faena[clave] = ""
+            # Fallback semana anterior
+            if not excels_faena[clave] and patron:
+                adir_ant = Path(dirs_ant[clave]) if clave in dirs_ant else None
+                if adir_ant and adir_ant.is_dir():
+                    cands_ant = [f for f in adir_ant.glob("*.xlsx")
+                                 if not f.name.startswith("~$") and patron in f.name.lower()]
+                    if len(cands_ant) == 1:
+                        excels_faena[clave] = str(cands_ant[0])
+                        if clave not in fallback_anterior:
+                            fallback_anterior.append(clave)
+
+        # Excel de Indicadores SSO: BDatos*.xlsx en 06 -SSO (con fallback semana anterior)
+        cands_ind = list(ind_dir.glob("BDatos*.xlsx")) if ind_dir.is_dir() else []
+        excel_ind = str(cands_ind[0]) if len(cands_ind) == 1 else ""
+        if not excel_ind and "SSO" in dirs_ant:
+            sso_ant = Path(dirs_ant["SSO"])
+            if sso_ant.is_dir():
+                cands_ant = [f for f in sso_ant.glob("BDatos*.xlsx")]
+                if len(cands_ant) == 1:
+                    excel_ind = str(cands_ant[0])
+                    if "SSO" not in fallback_anterior:
+                        fallback_anterior.append("SSO")
 
         return jsonify({
             "raiz":                str(raiz),
@@ -180,6 +258,7 @@ def api_semana_info():
             "nombre_archivo":      rutas["nombre_archivo"],
             "informes":            informes,
             "excels_faena":        excels_faena,
+            "fallback_anterior":   fallback_anterior,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -231,6 +310,64 @@ def api_calendario():
     except Exception as e:
         return jsonify({"error": str(e), "semanas": {}})
 
+# ── Word secciones con datos ──────────────────────────────────────────────────
+@app.route("/api/word-secciones", methods=["POST"])
+def api_word_secciones():
+    """
+    Lee un Word existente y devuelve qué secciones tienen datos reales
+    (vs. el texto '[No solicitado...]').  Usado para advertir antes de sobreescribir.
+    """
+    ruta = request.json.get("ruta", "")
+    if not ruta or not Path(ruta).is_file():
+        return jsonify({"con_datos": []})
+    try:
+        from docx import Document
+        from config import CONFIG_COMPANIAS
+
+        _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
+        MSG  = "[No solicitado. Presumiblemente en espera de envío información]"
+        SECCION_BACKUP = "Accidentabilidad Back-up"
+        SECCION_SSO    = "Accidentabilidad"
+        SECCION_GH     = "Gestión Hídrica"
+
+        doc = Document(ruta)
+        encontradas = {}   # clave → True/False (True = tiene datos)
+        clave_actual = None
+        buf = []
+
+        def _flush():
+            nonlocal buf
+            if clave_actual is None:
+                buf = []; return
+            contenido = "\n".join(buf)
+            # Tiene datos solo si hay texto real y NO es únicamente el placeholder
+            encontradas[clave_actual] = bool(buf) and (MSG not in contenido)
+            buf = []
+
+        _ESTILOS_TITULO = {"Título 1 AMSA", "Título 2 AMSA"}
+
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            if not t:
+                continue
+            es_titulo = p.style.name in _ESTILOS_TITULO
+            if es_titulo and t == SECCION_BACKUP:
+                _flush(); clave_actual = None
+            elif es_titulo and t == SECCION_SSO:
+                _flush(); clave_actual = "SSO"
+            elif es_titulo and t == SECCION_GH:
+                _flush(); clave_actual = "GH"
+            elif es_titulo and t in _N2K:
+                _flush(); clave_actual = _N2K[t]
+            elif clave_actual:
+                buf.append(t)
+        _flush()
+
+        con_datos = [k for k, v in encontradas.items() if v]
+        return jsonify({"con_datos": con_datos})
+    except Exception as e:
+        return jsonify({"con_datos": [], "error": str(e)})
+
 # ── Generar ───────────────────────────────────────────────────────────────────
 @app.route("/api/generar", methods=["POST"])
 def api_generar():
@@ -267,10 +404,12 @@ def api_revisar_ortografia():
 # ── Wrapper de tarea ──────────────────────────────────────────────────────────
 def _task(fn, data):
     global _running
+    import pythoncom
+    pythoncom.CoInitialize()
     _running = True; _start_cap()
     try:    fn(data)
     except: print(f"\n[ERROR]\n{traceback.format_exc()}")
-    finally: _stop_cap(); _running = False
+    finally: _stop_cap(); _running = False; pythoncom.CoUninitialize()
 
 # ── Implementación: Generar ───────────────────────────────────────────────────
 _path_overrides: dict = {}
@@ -354,22 +493,24 @@ def _generar(d):
                 return
 
             m.actualizar_secciones_word(
-                ruta_existente      = word_existente,
-                faenas_actualizar   = faenas,
-                dia_inicio          = d["dia_inicio"],
-                mes_inicio          = d["mes_inicio"],
-                dia_fin             = d["dia_fin"],
-                mes_fin             = d["mes_fin"],
-                year                = d["year"],
-                num_semana          = d["num_semana"],
-                excel_madre         = excel_madre,
-                excel_indicadores   = excel_ind,
-                carpeta_destino     = carpeta_destino,
-                nombre_override     = nombre_custom,
-                actualizar_vinculos = d.get("actualizar_vinculos", False),
-                informes_paths      = informes_paths,
-                incluir_sso         = d.get("incluir_sso", True),
-                incluir_gh          = d.get("incluir_gh",  True),
+                ruta_existente        = word_existente,
+                faenas_actualizar     = faenas,
+                dia_inicio            = d["dia_inicio"],
+                mes_inicio            = d["mes_inicio"],
+                dia_fin               = d["dia_fin"],
+                mes_fin               = d["mes_fin"],
+                year                  = d["year"],
+                num_semana            = d["num_semana"],
+                excel_madre           = excel_madre,
+                excel_indicadores     = excel_ind,
+                carpeta_destino       = carpeta_destino,
+                nombre_override       = nombre_custom,
+                actualizar_vinculos   = d.get("actualizar_vinculos", False),
+                informes_paths        = informes_paths,
+                excels_dirs_override  = {k: v for k, v in d.get("excels_faena", {}).items() if v},
+                incluir_sso           = d.get("incluir_sso", True),
+                incluir_gh            = d.get("incluir_gh",  True),
+                disco                 = d.get("disco") or None,
             )
         else:
             # ── Modo Word nuevo: generación completa (comportamiento original) ──
@@ -382,7 +523,7 @@ def _generar(d):
                 str(d["dia_inicio"]), str(d["mes_inicio"]),
                 str(d["dia_fin"]),    str(d["mes_fin"]),
                 str(d["year"]),       str(d["num_semana"]),
-                ",".join(faenas) if faenas else "",
+                ",".join(faenas) if faenas else "__NINGUNA__",
                 act_str,
                 "n",   # validar KPIs — siempre NO, es módulo separado
             ]
@@ -391,6 +532,7 @@ def _generar(d):
                 nombre_override = nombre_custom,
                 incluir_sso     = d.get("incluir_sso", True),
                 incluir_gh      = d.get("incluir_gh",  True),
+                disco           = d.get("disco") or None,
             )
 
         # Verificar formato del documento generado
@@ -427,7 +569,7 @@ def _verificar_documento(ruta_docx):
     #    Se excluyen separadores de miles (\d{3} tras la coma)
     coma_dec = re.findall(r'\b\d+,\d{1,2}\b(?!\d)', texto)
     if coma_dec:
-        muestra = ", ".join(dict.fromkeys(coma_dec)[:5])
+        muestra = ", ".join(list(dict.fromkeys(coma_dec))[:5])
         print(f"  [REVISAR] Coma usada como decimal (usar punto): {muestra}")
     else:
         print("  ✓ Decimales: no se detectaron comas como separador decimal")

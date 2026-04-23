@@ -485,6 +485,12 @@
     min-width: 28px;
   }
   .kpi-extra { font-size: 11px; color: var(--gray-l); padding-top: 2px; }
+  .kpi-status { display: flex; align-items: center; gap: 5px; margin-top: 3px;
+                font-family: "Consolas","Courier New",monospace; font-size: 11px; }
+  .kpi-status .kpi-val-lbl { min-width: 46px; }
+  .kpi-status-ok   { color: var(--ok); }
+  .kpi-status-warn { color: var(--err); font-weight: 700; }
+  .kpi-status-unk  { color: #CBD5E0; }
 </style>
 </head>
 <body>
@@ -707,7 +713,7 @@
 
       <div class="toggle-row">
         <label class="toggle">
-          <input type="checkbox" id="opt_vinculos">
+          <input type="checkbox" id="opt_vinculos" onchange="updateRutasVisibility()">
           <span class="toggle-slider"></span>
         </label>
         <span class="toggle-label">Actualizar vínculos del Excel antes de generar</span>
@@ -766,8 +772,8 @@
           </div>
         </div>
 
-        <div class="path-field" data-seccion="sso">
-          <div class="pf-label">Excel indicadores<br><span style="font-weight:400; color:var(--gray-l);">(Base Datos SSO)</span></div>
+        <div class="path-field" data-seccion="sso-ind">
+          <div class="pf-label">Excel de Indicadores SSO</div>
           <div class="pf-right">
             <div class="browse-row">
               <input type="text" id="g_excel_ind" placeholder="— auto-detectado —">
@@ -792,7 +798,7 @@
 
         <div class="card-subtitle">Informes Word por faena</div>
 
-        <div class="path-field" data-faena="MLP">
+        <div class="path-field" data-faena="MLP" data-tipo="word">
           <div class="pf-label">MLP — Los Pelambres</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -803,7 +809,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>01 -MLP\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CEN">
+        <div class="path-field" data-faena="CEN" data-tipo="word">
           <div class="pf-label">CEN — Centinela</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -814,7 +820,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>02 -CEN\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="ANT">
+        <div class="path-field" data-faena="ANT" data-tipo="word">
           <div class="pf-label">ANT — Antucoya</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -825,7 +831,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>03 -ANT\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CMZ">
+        <div class="path-field" data-faena="CMZ" data-tipo="word">
           <div class="pf-label">CMZ — Zaldívar</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -836,7 +842,7 @@
             <span class="field-hint">Patrón: <code>*.docx</code> (en subcarpeta <code>04 -CMZ\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="FCAB">
+        <div class="path-field" data-faena="FCAB" data-tipo="word">
           <div class="pf-label">FCAB</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -850,7 +856,7 @@
 
         <div class="card-subtitle" style="margin-top:14px;">Excels por faena</div>
 
-        <div class="path-field" data-faena="MLP">
+        <div class="path-field" data-faena="MLP" data-tipo="excel">
           <div class="pf-label">MLP — Los Pelambres</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -861,7 +867,7 @@
             <span class="field-hint">Patrón: <code>mlp semana*.xlsx</code> (en subcarpeta <code>01 -MLP\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CEN">
+        <div class="path-field" data-faena="CEN" data-tipo="excel">
           <div class="pf-label">CEN — Centinela</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -872,7 +878,7 @@
             <span class="field-hint">Patrón: <code>informe semanal*.xlsx</code> (en subcarpeta <code>02 -CEN\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="ANT">
+        <div class="path-field" data-faena="ANT" data-tipo="excel">
           <div class="pf-label">ANT — Antucoya</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -883,7 +889,7 @@
             <span class="field-hint">Patrón: <code>informe semanal*.xlsx</code> (en subcarpeta <code>03 -ANT\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="CMZ">
+        <div class="path-field" data-faena="CMZ" data-tipo="excel">
           <div class="pf-label">CMZ — Zaldívar</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -894,7 +900,7 @@
             <span class="field-hint">Patrón: <code>proyectado*.xlsx</code> (en subcarpeta <code>04 -CMZ\</code>)</span>
           </div>
         </div>
-        <div class="path-field" data-faena="FCAB">
+        <div class="path-field" data-faena="FCAB" data-tipo="excel">
           <div class="pf-label">FCAB</div>
           <div class="pf-right">
             <div class="browse-row">
@@ -930,6 +936,12 @@
 
       </div><!-- /coll-body -->
     </div><!-- /coll-wrap rutas -->
+
+    <div id="aviso_semana_anterior" style="display:none; margin-top:10px; margin-bottom:4px; padding:8px 12px;
+         background:#FFF8E6; border:1.5px solid var(--amber); border-radius:6px;
+         font-size:12px; color:#7A4F00;">
+      ⚠ Usando archivos de la <strong>semana anterior</strong> para: <span id="aviso_faenas"></span>
+    </div>
 
     <!-- Botón generar -->
     <div class="btn-row" style="margin-bottom:20px;">
@@ -1094,6 +1106,16 @@
       </div>
     </div>
 
+    <!-- Resumen de observaciones -->
+    <div id="gramSummaryWrap" style="display:none; margin-bottom:16px;">
+      <div class="card" style="border-left:4px solid #D69E2E; padding-left:20px;">
+        <div class="card-title" style="color:#975A16; border-bottom-color:#FEF3C7;">
+          ⚠ Observaciones encontradas
+        </div>
+        <div id="gramSummaryBody" style="font-size:13px; color:var(--gray);"></div>
+      </div>
+    </div>
+
   </div><!-- /tab-pdf -->
 
   <div class="page-bottom"></div>
@@ -1127,7 +1149,9 @@ let inlineActive  = false;   // true cuando el log inline está activo (tarea ge
 let reviewItems   = [];      // advertencias acumuladas durante la generación
 let resultPath    = '';      // ruta del informe generado
 let _calendario   = {};      // { "1": {dia_inicio,mes_inicio,dia_fin,mes_fin,detalles}, ... }
-let gramActive    = false;   // true cuando el log inline de gramática está activo
+let gramActive      = false;  // true cuando el log inline de gramática está activo
+let gramErrors      = [];     // [{para, msg, detail}] observaciones acumuladas
+let gramCurrentPara = '';     // párrafo activo durante la revisión
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tabs
@@ -1153,21 +1177,29 @@ function getFaenas() {
 
 // Muestra/oculta las filas de rutas según las faenas activas y la info disponible.
 function updateRutasVisibility() {
-  const activas = new Set(getFaenasActualizar());
-  const ssoOk   = document.getElementById('opt_sso') ? document.getElementById('opt_sso').checked : true;
-  const ghOk    = document.getElementById('opt_gh')  ? document.getElementById('opt_gh').checked  : true;
+  const activas  = new Set(getFaenasActualizar());
+  const vinculos = document.getElementById('opt_vinculos') ? document.getElementById('opt_vinculos').checked : false;
+  const ssoOk    = document.getElementById('opt_sso') ? document.getElementById('opt_sso').checked : true;
+  const ghOk     = document.getElementById('opt_gh')  ? document.getElementById('opt_gh').checked  : true;
 
-  // Filas por faena
-  document.querySelectorAll('#rutasBody .path-field[data-faena]').forEach(row => {
+  // Informes Word por faena: solo si la faena está seleccionada
+  document.querySelectorAll('#rutasBody .path-field[data-tipo="word"]').forEach(row => {
     row.style.display = activas.has(row.dataset.faena) ? '' : 'none';
   });
-  // Filas SSO (Excel indicadores + Excel SSO)
-  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso"]').forEach(row => {
-    row.style.display = ssoOk ? '' : 'none';
+  // Excels por faena: si la faena está seleccionada O si se va a actualizar vínculos (todos)
+  document.querySelectorAll('#rutasBody .path-field[data-tipo="excel"]').forEach(row => {
+    row.style.display = (activas.has(row.dataset.faena) || vinculos) ? '' : 'none';
   });
-  // Fila Gestión Hídrica
+  // Filas SSO: ambas siempre visibles (vínculos + indicadores)
+  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso-ind"]').forEach(row => {
+    row.style.display = '';
+  });
+  document.querySelectorAll('#rutasBody .path-field[data-seccion="sso"]').forEach(row => {
+    row.style.display = '';
+  });
+  // Fila Gestión Hídrica: siempre visible (vínculos)
   document.querySelectorAll('#rutasBody .path-field[data-seccion="gh"]').forEach(row => {
-    row.style.display = ghOk ? '' : 'none';
+    row.style.display = '';
   });
 }
 
@@ -1330,6 +1362,17 @@ async function fetchSemanaInfo() {
     }
     fillInput('g_exc_SSO', (j.excels_faena || {})['SSO']             || '', !!(j.excels_faena || {})['SSO']);
     fillInput('g_exc_GH',  (j.excels_faena || {})['Gestión Hídrica'] || '', !!(j.excels_faena || {})['Gestión Hídrica']);
+    // Aviso semana anterior
+    const fb = j.fallback_anterior || [];
+    const avisoEl = document.getElementById('aviso_semana_anterior');
+    if (avisoEl) {
+      if (fb.length > 0) {
+        document.getElementById('aviso_faenas').textContent = fb.join(', ');
+        avisoEl.style.display = '';
+      } else {
+        avisoEl.style.display = 'none';
+      }
+    }
   } catch(e) {
     fillInput('pathRaiz', '', false);
     const st = document.getElementById('pathRaiz_st');
@@ -1437,6 +1480,17 @@ async function fetchSemanaInfoConRaiz(raiz) {
     }
     fillInput('g_exc_SSO', (j.excels_faena || {})['SSO']             || '', !!(j.excels_faena || {})['SSO']);
     fillInput('g_exc_GH',  (j.excels_faena || {})['Gestión Hídrica'] || '', !!(j.excels_faena || {})['Gestión Hídrica']);
+    // Aviso semana anterior
+    const fb2 = j.fallback_anterior || [];
+    const avisoEl2 = document.getElementById('aviso_semana_anterior');
+    if (avisoEl2) {
+      if (fb2.length > 0) {
+        document.getElementById('aviso_faenas').textContent = fb2.join(', ');
+        avisoEl2.style.display = '';
+      } else {
+        avisoEl2.style.display = 'none';
+      }
+    }
   } catch(e) { /* servidor no disponible, ignorar */ }
 }
 
@@ -1486,6 +1540,23 @@ async function lanzarGenerar() {
   if (modo === 'existente' && faenasSeleccionadas.length === 0) {
     alert('Selecciona al menos una sección a actualizar.');
     return;
+  }
+
+  // ── Advertencia si alguna sección seleccionada ya tiene datos en el Word ──
+  if (modo === 'existente' && _seccionesConDatos.length > 0) {
+    const incluyeSSO = document.getElementById('opt_sso') && document.getElementById('opt_sso').checked;
+    const incluyeGH  = document.getElementById('opt_gh')  && document.getElementById('opt_gh').checked;
+    const seleccionadas = [...faenasSeleccionadas];
+    if (incluyeSSO) seleccionadas.push('SSO');
+    if (incluyeGH)  seleccionadas.push('GH');
+    const conDatosSeleccionadas = seleccionadas.filter(s => _seccionesConDatos.includes(s));
+    if (conDatosSeleccionadas.length > 0) {
+      const lista = conDatosSeleccionadas.join(', ');
+      const ok = confirm(
+        `Las siguientes secciones ya tienen información en el Word existente:\n\n  ${lista}\n\n¿Seguro que deseas sobreescribirlas?`
+      );
+      if (!ok) return;
+    }
   }
 
   // Incluir disco si el usuario eligió disco compartido
@@ -1625,6 +1696,9 @@ async function lanzarOrtografia() {
   const bar   = document.getElementById('gramProgress');
   const body  = document.getElementById('gramLogBody');
   body.innerHTML = '';
+  gramErrors      = [];
+  gramCurrentPara = '';
+  document.getElementById('gramSummaryWrap').style.display = 'none';
   badge.textContent      = '● Analizando…';
   badge.className        = 'il-badge visible';
   badge.style.background = 'rgba(245,166,35,.25)';
@@ -1634,12 +1708,27 @@ async function lanzarOrtografia() {
   gramActive             = true;
   wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-  await _lanzarTarea('/api/revisar-ortografia', { ruta_docx, faenas: getFaenas() }, 'btnPDF', () => {
+  await _lanzarTarea('/api/revisar-ortografia', { ruta_docx }, 'btnPDF', () => {
     gramActive             = false;
     bar.style.display      = 'none';
     badge.textContent      = '✓ Análisis completado';
     badge.style.background = 'rgba(39,174,96,.22)';
     badge.style.color      = '#276749';
+
+    // Mostrar resumen si hay observaciones
+    const summaryWrap = document.getElementById('gramSummaryWrap');
+    const summaryBody = document.getElementById('gramSummaryBody');
+    if (gramErrors.length > 0) {
+      summaryBody.innerHTML = gramErrors.map(e => `
+        <div style="padding:8px 0; border-bottom:1px solid #FEF3C7;">
+          <div style="font-size:11px; color:var(--gray-l); margin-bottom:3px;">${_esc(e.para)}</div>
+          <div style="color:var(--err);">${_esc(e.msg)}</div>
+          ${e.detail ? `<div style="font-size:12px; color:var(--gray); margin-top:2px;">${_esc(e.detail)}</div>` : ''}
+        </div>`
+      ).join('');
+      summaryWrap.style.display = '';
+      summaryWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   });
 }
 
@@ -1780,6 +1869,15 @@ function appendRawLog(text) {
     const gb   = document.getElementById('gramLogBody');
     const item = _makeProgItem(text);
     if (item) { gb.appendChild(item); gb.scrollTop = gb.scrollHeight; }
+    // Acumular errores para el resumen, con contexto de párrafo
+    const t0 = text.trimStart();
+    if (/^\[\d+\/\d+\]/.test(t0)) {
+      gramCurrentPara = t0.replace(/…$/, '…');  // guardar contexto de párrafo
+    } else if (t0.startsWith('! [')) {
+      gramErrors.push({ para: gramCurrentPara, msg: text.trim(), detail: '' });
+    } else if (t0.startsWith('"') && gramErrors.length > 0) {
+      gramErrors[gramErrors.length - 1].detail = text.trim();
+    }
   }
 
   if (!inlineActive) return;
@@ -1989,9 +2087,23 @@ function renderResultados(secciones, container) {
         valsHtml = `<div class="kpi-vals">${partes}</div>`;
       }
 
+      // Indicador de estado (bajo PM / sobre PM / en línea)
+      let statusHtml = '';
+      if (k.status) {
+        const s = k.status;
+        const lbl = '<span class="kpi-val-lbl">estado</span>';
+        if (s.ok === true) {
+          statusHtml = `<div class="kpi-status"><span class="kpi-status-ok">${lbl}✓ '${_esc(s.word)}'</span></div>`;
+        } else if (s.ok === false) {
+          statusHtml = `<div class="kpi-status"><span class="kpi-status-warn">${lbl}✗ Word '${_esc(s.word)}' ≠ Excel '${_esc(s.excel)}'</span></div>`;
+        } else {
+          statusHtml = `<div class="kpi-status"><span class="kpi-status-unk">${lbl}? Word '${_esc(s.word)}' (sin estado en Excel)</span></div>`;
+        }
+      }
+
       return `<div class="kpi-row ${k.estado}" data-estado="${k.estado}">
         <div class="kpi-icon">${icon}</div>
-        <div>${label}${valsHtml}</div>
+        <div>${label}${valsHtml}${statusHtml}</div>
         <div class="kpi-extra">${k.excel_label && k.excel_label !== k.label ? _esc(k.excel_label) : ''}</div>
       </div>`;
     }).join('');
@@ -2098,6 +2210,21 @@ function onModoWordChange() {
 
 
 
+let _seccionesConDatos = [];   // secciones del Word existente que ya tienen datos
+
+async function _cargarSeccionesWordExistente(ruta) {
+  try {
+    const r = await fetch('/api/word-secciones', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruta })
+    });
+    const j = await r.json();
+    _seccionesConDatos = j.con_datos || [];
+  } catch(e) {
+    _seccionesConDatos = [];
+  }
+}
+
 async function browseWordExistente() {
   try {
     const r = await fetch('/api/browse-file', {
@@ -2107,6 +2234,7 @@ async function browseWordExistente() {
     const j = await r.json();
     if (j.path) {
       fillInput('g_word_existente', j.path, true);
+      await _cargarSeccionesWordExistente(j.path);
     }
   } catch(e) {
     alert('No se pudo abrir el selector. ¿Está ejecutando server.py?');

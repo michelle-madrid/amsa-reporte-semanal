@@ -4,6 +4,7 @@ from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 
 from config import CONFIG_COMPANIAS
+from state import errores
 from utils.text_utils import limpiar_texto_global
 from utils.excel_utils import exportar_imagen_excel
 import os
@@ -271,6 +272,7 @@ def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None):
             run.font.color.rgb = RGBColor(*color)
     p.space_before = Pt(12)
     p.space_after = Pt(6)
+    p.paragraph_format.keep_with_next = True
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
@@ -279,6 +281,8 @@ def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
     p.paragraph_format.line_spacing = 1.0
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(0)
+    if bold:
+        p.paragraph_format.keep_with_next = True
     for run in p.runs:
         if bold:
             run.bold = True
@@ -469,11 +473,20 @@ def agregar_viñeta_full_bold(doc, texto, nivel=1, espacio_despues=6):
 
 # Inserta la tabla de producción semanal de una faena como imagen.
 def agregar_produccion_semana_faena(doc, clave, excel_madre):
-  if not excel_madre:
-    return
-
+  import os as _os
   cfg = CONFIG_COMPANIAS.get(clave)
   if not cfg:
+    return
+
+  if not excel_madre:
+    # Faena no seleccionada: usar imagen cacheada del Word previo si existe
+    img_cache = os.path.join(r"C:\Temp", f"tabla_{clave}.png")
+    if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
+      agregar_titulo(doc, "Producción Semana", nivel=2)
+      alto_imagen = 19.3 if clave == "CEN" else None
+      agregar_imagen(doc, img_cache, 19, alto_imagen, "")
+      if clave == "CEN":
+        doc.add_page_break()
     return
 
   agregar_titulo(doc, "Producción Semana", nivel=2)
@@ -489,6 +502,5 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
 
   agregar_imagen(doc, img_tabla, 19, alto_imagen, "")
 
-  # 🔥 ESTE ES EL CAMBIO
   if clave == "CEN":
     doc.add_page_break()

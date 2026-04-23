@@ -13,6 +13,35 @@ from PIL import ImageGrab
 import state
 from config import SSO_MARCADOR_TABLA
 
+# ── Helpers COM robustos ──────────────────────────────────────────────────────
+# ws_com.Cells(r, c) puede fallar con AttributeError: __call__.Value cuando
+# Excel fue creado con DispatchEx (late binding estricto). Los helpers
+# _cv y _cr usan Range con notación A1 como fallback.
+
+def _cv(ws, row, col):
+    """Lee el valor de la celda (row, col) de forma compatible con DispatchEx."""
+    try:
+        return ws.Cells(row, col).Value
+    except AttributeError:
+        return ws.Range(f"{get_column_letter(col)}{row}").Value
+
+def _cr(ws, row, col):
+    """Devuelve el Range de una celda para usar como clave en Sort u otros métodos COM."""
+    try:
+        c = ws.Cells(row, col)
+        # verificar que es un Range válido, no un dispatch huérfano
+        _ = c.Address
+        return c
+    except (AttributeError, Exception):
+        return ws.Range(f"{get_column_letter(col)}{row}")
+
+def _set_row_hidden(ws, row, hidden):
+    """Oculta o muestra una fila de forma compatible con DispatchEx."""
+    try:
+        ws.Rows(row).Hidden = hidden
+    except (AttributeError, Exception):
+        ws.Range(f"{row}:{row}").Hidden = hidden
+
 # Crea una ventana raíz oculta para usar los diálogos de selección sin mostrar una ventana principal.
 def _crear_root_oculto():
     root = tk.Tk()
@@ -43,6 +72,14 @@ def seleccionar_carpeta():
 
 # Obtiene o crea una instancia reutilizable de Excel por COM.
 def _obtener_excel_app():
+    # Si existe un proxy, verificar que sigue conectado; si no, descartarlo.
+    if state._excel_app is not None:
+        try:
+            _ = state._excel_app.Workbooks.Count
+        except Exception:
+            state._excel_app = None
+            state._workbooks_abiertos.clear()
+
     if state._excel_app is None:
         for intento in range(5):
             try:
@@ -70,16 +107,6 @@ def cerrar_excels():
             pass
         state._excel_app = None
         state._workbooks_abiertos = {}
-
-# Espera y recupera la imagen copiada al portapapeles desde Excel.
-def _clipboard_imagen_post_copy():
-    """Espera y reintenta leer el portapapeles (CopyPicture a veces tarda)."""
-    for espera in (1.2, 0.6, 0.6):
-        time.sleep(espera)
-        img = ImageGrab.grabclipboard()
-        if img is not None:
-            return img
-    return None
 
 # Exporta un rango de Excel como imagen.
 def exportar_imagen_excel(ruta_excel, hoja, rango, nombre_imagen):
@@ -114,21 +141,20 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
         for addr in lista_rangos[1:]:
             rng = excel.Union(rng, ws.Range(addr))
 
-        import win32clipboard
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.CloseClipboard()
-
         rng.CopyPicture(Appearance=1, Format=2)
-
-        img = _clipboard_imagen_post_copy()
+        time.sleep(1)
+        img = ImageGrab.grabclipboard()
         if img:
             img.save(imagen_salida, "PNG")
         else:
-            state.errores.append(f"[ERROR] No se pudo obtener imagen desde el portapapeles ({hoja} {rango_desc})")
+            msg = f"[ERROR] No se pudo obtener imagen del portapapeles ({hoja} {rango_desc})"
+            state.errores.append(msg)
+            print(f"  ✗ {msg}")
 
     except Exception as e:
-        state.errores.append(f"[ERROR] Falló exportación de imagen {hoja} {rango_desc}: {e}")
+        msg = f"[ERROR] Falló exportación de imagen {hoja} {rango_desc}: {e}"
+        state.errores.append(msg)
+        print(f"  ✗ {msg}")
 
     return imagen_salida
 
@@ -159,36 +185,17 @@ def _fila_tiene_contenido_util(row_vals):
 def _ultima_fila_con_datos_en_rango_com(ws_com, min_col, min_row, max_col, max_row):
     """Usa la hoja ya abierta en Excel (COM) para no bloquear el archivo con otro lector."""
     for r in range(max_row, min_row - 1, -1):
-        vals = [ws_com.Cells(r, c).Value for c in range(min_col, max_col + 1)]
+        vals = [_cv(ws_com, r, c) for c in range(min_col, max_col + 1)]
         if _fila_tiene_contenido_util(vals):
             return r
     return min_row
 
-# Implementa una parte específica de la lógica del informe.
-def _guardar_anchos_columnas(ws_com):
-    """Devuelve dict {col_index: ColumnWidth} para todas las columnas del UsedRange."""
-    try:
-        used = ws_com.UsedRange
-        first_col = used.Column
-        last_col = first_col + used.Columns.Count - 1
-        return {c: ws_com.Columns(c).ColumnWidth for c in range(first_col, last_col + 1)}
-    except Exception:
-        return {}
-
-
-def _restaurar_anchos_columnas(ws_com, anchos):
-    """Restaura los anchos de columna guardados previamente."""
-    for c, w in anchos.items():
-        try:
-            ws_com.Columns(c).ColumnWidth = w
-        except Exception:
-            pass
 
 
 def _columna_izquierda_tabla_sso(ws_com, fila_encabezado, max_col_limit=40):
     """Primera columna con texto en la fila de encabezado (por si hay celdas combinadas)."""
     for c in range(1, max_col_limit + 1):
-        v = ws_com.Cells(fila_encabezado, c).Value
+        v = _cv(ws_com, fila_encabezado, c)
         if v is not None and str(v).strip() != "":
             return c
     return 1
@@ -198,7 +205,7 @@ def _ultima_columna_cabecera_sso(ws_com, fila_encabezado, max_col_limit=40):
     """Última columna con texto en la fila del encabezado de la tabla."""
     last = 1
     for c in range(1, max_col_limit + 1):
-        v = ws_com.Cells(fila_encabezado, c).Value
+        v = _cv(ws_com, fila_encabezado, c)
         if v is not None and str(v).strip() != "":
             last = c
     return max(last, 1)
@@ -214,7 +221,7 @@ def _filas_encabezado_tablas_sso(ws_com, marcador=SSO_MARCADOR_TABLA):
     filas = []
     for r in range(1, max_r + 1):
         for c in range(1, 21):
-            v = ws_com.Cells(r, c).Value
+            v = _cv(ws_com, r, c)
             if v is None:
                 continue
             if marcador in str(v).strip().lower():
@@ -231,7 +238,7 @@ def _tabla_sso_tiene_datos(ws_com, h_row, last_row, min_c, last_c):
     """Busca la columna 'Id del incidente' y omite la tabla si todos los IDs son 0 o None."""
     col_id = None
     for c in range(min_c, last_c + 1):
-        v = ws_com.Cells(h_row, c).Value
+        v = _cv(ws_com, h_row, c)
         if v is not None and SSO_MARCADOR_TABLA in str(v).strip().lower():
             col_id = c
             break
@@ -240,7 +247,7 @@ def _tabla_sso_tiene_datos(ws_com, h_row, last_row, min_c, last_c):
         return True  # No encontramos la columna, incluir por precaución
 
     for r in range(h_row + 1, last_row + 1):
-        v = ws_com.Cells(r, col_id).Value
+        v = _cv(ws_com, r, col_id)
         if v is not None and v != 0:
             return True
 
@@ -270,11 +277,9 @@ def _rangos_tablas_sso_backup_dinamico(ws_com):
         if max_row_bloque < h_row:
             max_row_bloque = h_row
 
-        # Anclar min_c en la columna del marcador (no buscar desde A)
-        min_c = marcador_col
-        last_c = _ultima_columna_cabecera_sso(ws_com, h_row)
-        if last_c < min_c:
-            last_c = min_c
+        # Columnas fijas: A (1) hasta J (10)
+        min_c = 1
+        last_c = 10
         last_row = _ultima_fila_con_datos_en_rango_com(ws_com, min_c, h_row, last_c, max_row_bloque)
 
         if not _tabla_sso_tiene_datos(ws_com, h_row, last_row, min_c, last_c):
@@ -310,37 +315,26 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
     # Buscar columna "Id del incidente"
     col_id = None
     for c in range(col_ini, col_fin + 1):
-        v = ws_com.Cells(row_ini, c).Value
+        v = _cv(ws_com, row_ini, c)
         if v is not None and SSO_MARCADOR_TABLA in str(v).strip().lower():
             col_id = c
             break
-
-    # Guardar anchos de columna antes de cualquier operación (no modificar la hoja)
-    anchos_originales = _guardar_anchos_columnas(ws_com)
 
     # Ocultar filas con ID = 0 o None
     filas_ocultas = []
     if col_id:
         for r in range(row_ini + 1, row_fin + 1):
-            v = ws_com.Cells(r, col_id).Value
+            v = _cv(ws_com, r, col_id)
             if v is None or v == 0:
-                ws_com.Rows(r).Hidden = True
+                _set_row_hidden(ws_com, r, True)
                 filas_ocultas.append(r)
 
-    # Limpiar portapapeles antes de copiar para evitar que se reutilice imagen anterior
-    try:
-        import win32clipboard
-        win32clipboard.OpenClipboard()
-        win32clipboard.EmptyClipboard()
-        win32clipboard.CloseClipboard()
-    except Exception as e:
-        print(f"  ! Advertencia: no se pudo limpiar portapapeles: {e}")
-
-    # Capturar imagen directamente desde ws_com (ya abierto en COM)
+    # Exportar via portapapeles (mapa de bits) para máxima calidad de imagen.
     try:
         rng = ws_com.Range(rango)
         rng.CopyPicture(Appearance=1, Format=2)
-        img = _clipboard_imagen_post_copy()
+        time.sleep(1)
+        img = ImageGrab.grabclipboard()
         if img:
             img.save(imagen_salida, "PNG")
         else:
@@ -352,10 +346,9 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
         state.errores.append(msg)
         print(f"  ✗ {msg}")
 
-    # Restaurar filas ocultas y anchos de columna originales
+    # Restaurar filas ocultas
     for r in filas_ocultas:
-        ws_com.Rows(r).Hidden = False
-    _restaurar_anchos_columnas(ws_com, anchos_originales)
+        _set_row_hidden(ws_com, r, False)
 
     return imagen_salida
 
@@ -376,8 +369,10 @@ _VINCULOS_IGNORAR = [
     "cd mina",
 ]
 
-def _buscar_excel_en_carpeta(carpeta, patron, clave):
-    """Busca un .xlsx cuyo nombre contenga 'patron'. Si no lo encuentra, abre selector."""
+def _buscar_excel_en_carpeta(carpeta, patron, clave, carpeta_fallback=None, silencioso=False):
+    """Busca un .xlsx cuyo nombre contenga 'patron'.
+    Si no lo encuentra, intenta en carpeta_fallback (semana anterior) antes de abrir selector.
+    silencioso=True suprime los mensajes de advertencia (usar para faenas no seleccionadas)."""
     if os.path.isdir(carpeta):
         candidatos = [
             f for f in os.listdir(carpeta)
@@ -388,22 +383,53 @@ def _buscar_excel_en_carpeta(carpeta, patron, clave):
         if len(candidatos) == 1:
             return os.path.join(carpeta, candidatos[0])
         if len(candidatos) > 1:
-            print(f"  ! {clave}: múltiples coincidencias para '{patron}' en {carpeta} → abriendo selector")
+            if not silencioso:
+                print(f"  ! {clave}: múltiples coincidencias para '{patron}' en {carpeta} → abriendo selector")
+            return seleccionar_archivo(f"Excel de {clave}")
         else:
-            print(f"  ! {clave}: no se encontró '{patron}' en {carpeta} → abriendo selector")
+            if not silencioso:
+                print(f"  ! {clave}: no se encontró '{patron}' en {carpeta}")
     else:
-        print(f"  ! {clave}: carpeta no existe: {carpeta} → abriendo selector")
+        if not silencioso:
+            print(f"  ! {clave}: carpeta no existe: {carpeta}")
+
+    # Intentar en la carpeta de la semana anterior
+    if carpeta_fallback and os.path.isdir(str(carpeta_fallback)):
+        candidatos_fb = [
+            f for f in os.listdir(str(carpeta_fallback))
+            if f.lower().endswith(".xlsx")
+            and not f.startswith("~$")
+            and patron in f.lower()
+        ]
+        if len(candidatos_fb) == 1:
+            ruta = os.path.join(str(carpeta_fallback), candidatos_fb[0])
+            if not silencioso:
+                print(f"  ⚠ {clave}: no encontrado en semana actual → usando semana anterior: {candidatos_fb[0]}")
+            return ruta
+        elif len(candidatos_fb) > 1:
+            if not silencioso:
+                print(f"  ! {clave}: múltiples coincidencias en semana anterior → abriendo selector")
+        else:
+            if not silencioso:
+                print(f"  ! {clave}: tampoco encontrado en semana anterior → abriendo selector")
+    elif carpeta_fallback:
+        if not silencioso:
+            print(f"  ! {clave}: carpeta de semana anterior no existe → abriendo selector")
+    else:
+        if not silencioso:
+            print(f"  ! {clave}: sin fallback → abriendo selector")
 
     return seleccionar_archivo(f"Excel de {clave}")
 
 # Redirige los vínculos externos del workbook a las subcarpetas de faena de la semana actual.
-def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None):  # carpeta_raiz reservado para uso futuro
+def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None, informes_dirs_fallback=None, faenas_seleccionadas=None):
     """
     Para cada vínculo externo:
     - Si el nombre contiene un fragmento de _VINCULOS_IGNORAR → se omite.
     - Si la subcarpeta de faena aparece en el path → busca por patrón en esa subcarpeta.
-    - Si el nombre del archivo coincide con un patrón de _PATRON_EXCEL_RAIZ → busca en carpeta_raiz.
+      Si no lo encuentra, intenta en la carpeta equivalente de informes_dirs_fallback (semana anterior).
     - Si nada coincide → abre el explorador.
+    faenas_seleccionadas: set de claves seleccionadas para actualizar; None = todas (muestra todos los avisos).
     """
     try:
         links = wb.LinkSources(1)  # 1 = xlExcelLinks
@@ -428,7 +454,9 @@ def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None):  # carpeta
                 subcarpeta = os.path.basename(str(carpeta_nueva)).lower()
                 if subcarpeta in link_norm:
                     patron = _PATRON_EXCEL_FAENA.get(clave, "")
-                    nueva_ruta = _buscar_excel_en_carpeta(str(carpeta_nueva), patron, clave)
+                    carpeta_fallback = (informes_dirs_fallback or {}).get(clave)
+                    es_silencioso = (faenas_seleccionadas is not None and clave not in faenas_seleccionadas)
+                    nueva_ruta = _buscar_excel_en_carpeta(str(carpeta_nueva), patron, clave, carpeta_fallback=carpeta_fallback, silencioso=es_silencioso)
                     clave_encontrada = clave
                     break
 
@@ -454,35 +482,45 @@ def _ordenar_hoja_sso(wb):
     """Ordena cada tabla SSO por su columna Fecha de forma ascendente y permanente."""
     try:
         ws = wb.Worksheets("SSO")
-        anchos = _guardar_anchos_columnas(ws)
-        try:
-            used = ws.UsedRange
-            sheet_max_r = used.Row + used.Rows.Count - 1
-            filas_h = [r for r, _ in _filas_encabezado_tablas_sso(ws)]  # solo filas, descartar col
-            if not filas_h:
-                return
-            tablas_ordenadas = 0
-            for idx, h_row in enumerate(filas_h):
-                next_h = filas_h[idx + 1] if idx + 1 < len(filas_h) else None
-                last_row = (next_h - 1) if next_h is not None else sheet_max_r
-                if last_row <= h_row:
+        used = ws.UsedRange
+        sheet_max_r = used.Row + used.Rows.Count - 1
+        filas_h = [r for r, _ in _filas_encabezado_tablas_sso(ws)]
+        if not filas_h:
+            return
+        tablas_ordenadas = 0
+        for idx, h_row in enumerate(filas_h):
+            next_h = filas_h[idx + 1] if idx + 1 < len(filas_h) else None
+            last_row = (next_h - 1) if next_h is not None else sheet_max_r
+            if last_row <= h_row:
+                continue
+            min_c = _columna_izquierda_tabla_sso(ws, h_row)
+            last_c = _ultima_columna_cabecera_sso(ws, h_row)
+            col_id = None
+            col_fecha = None
+            for c in range(min_c, last_c + 1):
+                v = _cv(ws, h_row, c)
+                if not v:
                     continue
-                min_c = _columna_izquierda_tabla_sso(ws, h_row)
-                last_c = _ultima_columna_cabecera_sso(ws, h_row)
-                col_fecha = None
-                for c in range(min_c, last_c + 1):
-                    v = ws.Cells(h_row, c).Value
-                    if v and "fecha" in str(v).strip().lower():
-                        col_fecha = c
-                        break
-                if not col_fecha:
-                    continue
-                data_range = ws.Range(ws.Cells(h_row, min_c), ws.Cells(last_row, last_c))
-                data_range.Sort(Key1=ws.Cells(h_row, col_fecha), Order1=1, Header=1)
-                tablas_ordenadas += 1
-            print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
-        finally:
-            _restaurar_anchos_columnas(ws, anchos)
+                v_low = str(v).strip().lower()
+                if col_id is None and SSO_MARCADOR_TABLA in v_low:
+                    col_id = c
+                if col_fecha is None and "fecha" in v_low:
+                    col_fecha = c
+            if not col_id and not col_fecha:
+                continue
+            data_range = ws.Range(_cr(ws, h_row, min_c), _cr(ws, last_row, last_c))
+            if col_id and col_fecha:
+                data_range.Sort(
+                    Key1=_cr(ws, h_row, col_id),    Order1=1,
+                    Key2=_cr(ws, h_row, col_fecha),  Order2=1,
+                    Header=1, Orientation=1,
+                )
+            elif col_id:
+                data_range.Sort(Key1=_cr(ws, h_row, col_id), Order1=1, Header=1, Orientation=1)
+            else:
+                data_range.Sort(Key1=_cr(ws, h_row, col_fecha), Order1=1, Header=1, Orientation=1)
+            tablas_ordenadas += 1
+        print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
     except Exception as e:
         msg = f"[REVISAR] No se pudo ordenar SSO: {e}"
         state.errores.append(msg)
@@ -512,29 +550,61 @@ def _buscar_wb_en_excel_usuario(ruta_excel):
 
 def _refrescar_todos_los_vinculos(wb):
     """
-    Fuerza el refresco de TODOS los vínculos externos del workbook.
-    Después de cambiar rutas de faenas seleccionadas, esto asegura que los
-    vínculos no modificados también se recalculen (evita #REF en celdas no tocadas).
+    Fuerza el refresco de TODOS los vínculos externos del workbook, de a uno.
+    Actualizar todos juntos hace que un solo fallo aborte el lote completo y deje
+    el COM inestable. Actualizando individualmente se aíslan los errores.
     """
     try:
         links = wb.LinkSources(1)   # 1 = xlExcelLinks
         if not links:
             return
         print(f"  Refrescando {len(links)} vínculo(s) externos…")
-        wb.UpdateLink(links, 1)
+        errores_link = []
+        for link in links:
+            try:
+                wb.UpdateLink(link, 1)
+            except Exception as e:
+                errores_link.append(os.path.basename(str(link)))
+        if errores_link:
+            print(f"  ! No se pudieron refrescar {len(errores_link)} vínculo(s): {', '.join(errores_link)}")
     except Exception as e:
-        print(f"  ! No se pudieron refrescar todos los vínculos: {e}")
+        print(f"  ! Error al obtener lista de vínculos: {e}")
 
 
-def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False):
+def _cerrar_wb_por_nombre(excel_app, ruta_objetivo, limpiar_cache=False):
+    """Cierra el workbook cuyo nombre de archivo coincide con ruta_objetivo, si está abierto."""
+    nombre_objetivo = os.path.basename(ruta_objetivo).lower()
+    try:
+        for i in range(excel_app.Workbooks.Count, 0, -1):
+            try:
+                wb_test = excel_app.Workbooks(i)
+                if os.path.basename(wb_test.FullName).lower() == nombre_objetivo:
+                    wb_test.Close(False)
+                    if limpiar_cache:
+                        # Eliminar del cache por ruta completa o nombre
+                        for k in list(state._workbooks_abiertos.keys()):
+                            if os.path.basename(str(k)).lower() == nombre_objetivo:
+                                del state._workbooks_abiertos[k]
+                    break
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False, guardar_en_lugar=False, informes_dirs_fallback=None, faenas_seleccionadas=None):
     """
-    Actualiza vínculos y guarda una copia _act en carpeta_destino.
-    Usa el Excel del usuario si está abierto (para tener datos ya calculados),
-    o DispatchEx si no está abierto.
+    Actualiza vínculos del Excel madre.
+    - guardar_en_lugar=True  → sobreescribe el archivo actual con wb.Save() (modo Word existente).
+    - guardar_en_lugar=False → guarda una copia _act en carpeta_destino (modo generación nueva).
+    Usa el Excel del usuario si está abierto, o DispatchEx si no lo está.
     """
     try:
-        nombre_base = os.path.splitext(os.path.basename(ruta_excel))[0]
-        ruta_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx") if carpeta_destino else None
+        if guardar_en_lugar:
+            ruta_act = None
+        else:
+            nombre_base = os.path.splitext(os.path.basename(ruta_excel))[0]
+            ruta_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx") if carpeta_destino else None
 
         # Intentar primero con el Excel del usuario (evita problemas de read-only).
         # Hacerlo ANTES de _obtener_excel_app() para que Dispatch encuentre
@@ -545,7 +615,7 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
             print("  Usando Excel del usuario para actualizar vínculos.")
             excel_usuario.DisplayAlerts = False
             print("\nActualizando vínculos externos...")
-            actualizar_vinculos_faenas(wb_usuario, informes_dirs, carpeta_raiz=carpeta_raiz)
+            actualizar_vinculos_faenas(wb_usuario, informes_dirs, carpeta_raiz=carpeta_raiz, informes_dirs_fallback=informes_dirs_fallback, faenas_seleccionadas=faenas_seleccionadas)
             _refrescar_todos_los_vinculos(wb_usuario)
             if ordenar_sso:
                 print("\nOrdenando tablas SSO por fecha...")
@@ -556,7 +626,16 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
                 time.sleep(2)
             except Exception as e:
                 print(f"  ! No se pudo recalcular: {e}")
-            if ruta_act:
+            # Pausa breve para que el COM cross-proceso se estabilice tras el refresco
+            time.sleep(1)
+            if guardar_en_lugar:
+                try:
+                    wb_usuario.Save()
+                    print(f"  ✓ Excel guardado (sobreescrito): {os.path.basename(ruta_excel)}")
+                except Exception as e:
+                    print(f"  ! No se pudo guardar: {e}")
+            elif ruta_act:
+                _cerrar_wb_por_nombre(excel_usuario, ruta_act)
                 try:
                     wb_usuario.SaveCopyAs(ruta_act)
                     print(f"  ✓ Copia guardada en: {ruta_act}")
@@ -571,7 +650,7 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
         state._workbooks_abiertos[ruta_excel] = wb
 
         print("\nActualizando vínculos externos...")
-        actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=carpeta_raiz)
+        actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=carpeta_raiz, informes_dirs_fallback=informes_dirs_fallback, faenas_seleccionadas=faenas_seleccionadas)
         _refrescar_todos_los_vinculos(wb)
         if ordenar_sso:
             print("\nOrdenando tablas SSO por fecha...")
@@ -582,7 +661,15 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
             time.sleep(2)
         except Exception as e:
             print(f"  ! No se pudo recalcular: {e}")
-        if ruta_act:
+        if guardar_en_lugar:
+            try:
+                wb.Save()
+                print(f"  ✓ Excel guardado (sobreescrito): {os.path.basename(ruta_excel)}")
+            except Exception as e:
+                print(f"  ! No se pudo guardar: {e}")
+        elif ruta_act:
+            # Cerrar _act si ya está abierto en nuestra instancia DispatchEx
+            _cerrar_wb_por_nombre(excel, ruta_act, limpiar_cache=True)
             try:
                 wb.SaveCopyAs(ruta_act)
                 print(f"  ✓ Copia guardada en: {ruta_act}")
