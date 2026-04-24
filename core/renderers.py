@@ -9,7 +9,7 @@ from state import errores
 from utils.text_utils import *
 from utils.text_utils import _quitar_dos_puntos_inicio
 from utils.word_utils import *
-from utils.excel_utils import exportar_imagen_excel
+from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen
 from core.extractores import *
 
 
@@ -520,14 +520,20 @@ def cen_render_catodos(doc, texto_compania, excel_madre=None):
     for linea in bloque_oxe:
       texto_base = re.sub(r"^[•○o·\-\s\u200b\ufeff]+", "", linea).strip()
 
+      # Saltar "(Resultado vs Plan Mensual...)" y cualquier Acumulado del Word:
+      # se reemplazan por las celdas B139/B140 del Excel al final del bloque
       if (
-        texto_base.startswith("Acumulado al mes")
+        texto_base.startswith("(")
+        or texto_base.startswith("Acumulado al mes")
         or texto_base.startswith("Acumulado al año")
         or texto_base.startswith("Respecto del Plan")
       ):
-        agregar_linea_acumulado(doc, texto_base)
-      else:
-        agregar_viñeta(doc, linea, nivel=2, espacio_despues=6)
+        continue
+      agregar_viñeta(doc, linea, nivel=2, espacio_despues=6)
+    if excel_madre:
+      lineas_acum = extraer_acumulados_oxe_cen(excel_madre)
+      for linea_acum in lineas_acum:
+        agregar_linea_acumulado(doc, linea_acum)
 
 # Renderiza contenido específico dentro del documento Word.
 def ant_render_medio_ambiente(doc, lineas):
@@ -759,6 +765,9 @@ def cen_render_medio_ambiente(doc, lineas):
     texto = re.sub(r"^(o\s+|[•·\-\s]+)", "", texto).strip()
     texto = limpiar_texto_global(texto)
 
+    if not texto:
+      continue
+
     if texto.startswith("Fuente:") or texto.startswith("Nota:"):
       p = doc.add_paragraph(style="Normal AMSA")
       p.paragraph_format.left_indent = Cm(1.27)
@@ -783,7 +792,7 @@ def cen_render_medio_ambiente(doc, lineas):
     if es_subtitulo:
       agregar_circulo_blanco_manual(
         doc,
-        texto.strip(),
+        texto,
         left_indent_cm=1.9,
         bullet_indent_cm=1.45,
         espacio_despues=6
@@ -794,7 +803,7 @@ def cen_render_medio_ambiente(doc, lineas):
     if subtitulo_actual:
       agregar_circulo_blanco_manual(
         doc,
-        texto.strip(),
+        texto,
         left_indent_cm=3.0,
         bullet_indent_cm=2.55,
         espacio_despues=6
@@ -802,7 +811,7 @@ def cen_render_medio_ambiente(doc, lineas):
     else:
       agregar_circulo_blanco_manual(
         doc,
-        texto.strip(),
+        texto,
         left_indent_cm=1.9,
         bullet_indent_cm=1.45,
         espacio_despues=6
@@ -1090,7 +1099,7 @@ def procesar_cen(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="CEN")
   doc.add_page_break()
   agregar_produccion_semana_faena(doc, "CEN", excel_madre)
-  doc.add_paragraph("") 
+  doc.add_page_break()
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
   validar_acumulados_principales_desviaciones(texto_compania, "CEN", es_seleccionada=excel_madre is not None)
   procesar_seccion(
@@ -1162,8 +1171,10 @@ def cmz_render_planta(doc, texto_compania, excel_madre=None):
 
   if acumulados:
     doc.add_paragraph("")
-    for linea in acumulados:
+    for i, linea in enumerate(acumulados):
       agregar_texto(doc, linea)
+      if i < len(acumulados) - 1:
+        doc.add_paragraph("")
 
   for texto in otros:
     print(f"[WARNING] CMZ - Planta: línea no clasificada -> '{texto}'")

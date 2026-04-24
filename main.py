@@ -1,6 +1,7 @@
 """Punto de entrada para generar el informe semanal completo."""
 
 import os
+import re
 from datetime import date, timedelta
 
 from docx import Document
@@ -201,6 +202,12 @@ def _construir_doc(
     resumen_texto = extraer_resumen_excel(excel_madre)
     for linea in resumen_texto.split("\n"):
         linea_limpia = linea.strip()
+        linea_limpia = re.sub(
+            r'cantidad inferior en un 0[.,]0\s*%,?',
+            'en línea',
+            linea_limpia,
+            flags=re.IGNORECASE,
+        )
         if linea_limpia:
             agregar_texto(doc, linea_limpia)
             if linea_limpia.endswith("."):

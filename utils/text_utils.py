@@ -276,7 +276,7 @@ def limpiar_texto_global(texto):
   if not texto:
     return texto
 
-  texto = str(texto).strip()
+  texto = str(texto).strip().strip(' ').strip()
 
   # normalizar tabulaciones a espacio simple
   texto = re.sub(r'\t+', ' ', texto)
@@ -331,6 +331,10 @@ def limpiar_texto_global(texto):
     texto = texto[:-1] + "."
   elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
     texto = texto + "."
+
+  # reemplazar el espacio antes de un signo negativo por espacio no separable (U+00A0)
+  # para que Word nunca parta la línea antes del "-número", sin alterar el guion
+  texto = re.sub(r' (?=-\d)', ' ', texto)
 
   return texto
 

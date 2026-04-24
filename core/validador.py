@@ -1,6 +1,7 @@
 """Validación cruzada de KPIs entre texto Word y tabla Excel madre por compañía."""
 
 import re
+import time
 
 import state
 from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO
@@ -48,7 +49,7 @@ def _normalizar_excel(valor):
     if isinstance(valor, (int, float)):
         v = float(valor)
         candidatos = [round(v, 4)]
-        if 0 < abs(v) < 1:
+        if 0 < abs(v) < 10:
             candidatos.append(round(v * 100, 4))
         return candidatos
     if isinstance(valor, str):
@@ -215,6 +216,23 @@ def _leer_excel_por_etiqueta(wb_com, nombre_hoja, rango):
 
 # ── Lectura por celdas exactas (CONFIG_CELDAS_DESVIACIONES) ──────────────────
 
+_RPC_REJECTED = -2147418111  # RPC_E_CALL_REJECTED: Excel ocupado, reintentable
+
+def _com_call(fn, reintentos=5, pausa=1.5):
+    """Ejecuta fn() reintentando si Excel rechaza la llamada COM por estar ocupado.
+    pywintypes.com_error guarda el HRESULT en args[0], no en el atributo .hresult."""
+    for intento in range(reintentos):
+        try:
+            return fn()
+        except Exception as e:
+            args = getattr(e, 'args', ())
+            hresult = args[0] if args and isinstance(args[0], int) else getattr(e, 'hresult', None)
+            if intento < reintentos - 1 and hresult == _RPC_REJECTED:
+                time.sleep(pausa)
+                continue
+            raise
+
+
 def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
     """
     Lee las celdas exactas definidas en CONFIG_CELDAS_DESVIACIONES.
@@ -223,7 +241,7 @@ def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
     Auto-detecta el estado escaneando la fila si no se configura celda_status.
     """
     try:
-        ws = wb_com.Worksheets(nombre_hoja)
+        ws = _com_call(lambda: wb_com.Worksheets(nombre_hoja))
     except Exception as e:
         return None, str(e)
 
@@ -238,7 +256,7 @@ def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
         nums = set()
         for celda_a1 in filter(None, (celda_dif, celda_pct)):
             try:
-                v = ws.Range(celda_a1).Value
+                v = _com_call(lambda c=celda_a1: ws.Range(c).Value)
                 for n in _normalizar_excel(v):
                     nums.add(n)
             except Exception:
@@ -247,7 +265,7 @@ def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
         status_excel = None
         if celda_status_cfg:
             try:
-                v = ws.Range(celda_status_cfg).Value
+                v = _com_call(lambda c=celda_status_cfg: ws.Range(c).Value)
                 if isinstance(v, str) and _PAT_STATUS.search(v):
                     status_excel = _norm(v.strip())
             except Exception:
@@ -258,7 +276,7 @@ def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
                 row_num = row_match.group()
                 if row_num not in _cache_filas:
                     try:
-                        rng = ws.Range(f"A{row_num}:Z{row_num}").Value
+                        rng = _com_call(lambda r=row_num: ws.Range(f"A{r}:Z{r}").Value)
                         found = None
                         if rng:
                             fila_vals = rng[0] if (isinstance(rng, (tuple, list))
@@ -810,7 +828,9 @@ def validar_kpis_vs_excel(informes, wb_com):
             tabla_excel, err = _leer_desviaciones_dinamico(wb_com, clave, cfg.get("rango_desviaciones"))
 
         if tabla_excel is None:
-            print(f"\n  ! {clave}: no se pudo leer hoja '{clave}' ({err})")
+            es_rpc = _RPC_REJECTED in str(err)
+            aviso = " — Excel ocupado o bloqueado: cierra ventanas de Excel abiertas y reintenta." if es_rpc else ""
+            print(f"\n  ! {clave}: no se pudo leer hoja '{clave}'{aviso}\n    ({err})")
             state.errores.append(f"[REVISAR] Validación {clave}: {err}")
             total_warn += 1
             continue
