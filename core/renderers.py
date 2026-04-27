@@ -144,7 +144,7 @@ def _validar_clasificacion_acumulados(lineas_acum, clave):
         clausulas = re.split(r"\s+y\s+", linea)
         for clausula in clausulas:
             tc = normalizar_texto_clave(clausula)
-            pcts = _PAT_PCT_ACUM.findall(clausula)
+            pcts = _PAT_PCT_ACUM.findall(re.sub(r'([+\-])\s(\d)', r'\1\2', clausula))
             if not pcts:
                 continue
 

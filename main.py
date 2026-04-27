@@ -168,11 +168,19 @@ def _construir_doc(
             _actualizadas.append(_clave)
         else:
             _pendientes.append(_clave)
-    if incluir_sso:
+    _sso_en_cache = es_parcial and any(
+        os.path.exists(os.path.join(_TEMP, n)) and os.path.getsize(os.path.join(_TEMP, n)) > 0
+        for n in ("valor_semanal.png", "valor_mensual.png", "valor_anual.png")
+    )
+    if incluir_sso or _sso_en_cache:
         _actualizadas.append("SSO")
     else:
         _pendientes.append("SSO")
-    if incluir_gh:
+
+    _gh_en_cache = es_parcial and \
+        os.path.exists(os.path.join(_TEMP, "gestion_hidrica.png")) and \
+        os.path.getsize(os.path.join(_TEMP, "gestion_hidrica.png")) > 0
+    if incluir_gh or _gh_en_cache:
         _actualizadas.append("Gestión Hídrica")
     else:
         _pendientes.append("Gestión Hídrica")
@@ -226,10 +234,16 @@ def _construir_doc(
     if incluir_gh:
         img_hidrica = exportar_imagen_excel(excel_madre, "Gestión Hídrica", "A3:W20", "gestion_hidrica.png")
         agregar_imagen(doc, img_hidrica, 19, 3.24, "")
+    elif es_parcial:
+        # Modo Word existente sin GH seleccionada: restaurar imagen del Word previo
+        img_cache = os.path.join(_TEMP, "gestion_hidrica.png")
+        if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
+            agregar_imagen(doc, img_cache, 19, 3.24, "")
+        else:
+            agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
-        if not es_parcial:
-            print("  → Gestión Hídrica: En espera de envío información")
+        print("  → Gestión Hídrica: En espera de envío información")
 
     agregar_titulo(doc, "Accidentabilidad", nivel=2, nueva_pagina=True)
     if incluir_sso:
@@ -470,6 +484,7 @@ def actualizar_secciones_word(
 
     # Encabezados de secciones no-faena que marcan el fin del bloque de una compañía
     _SECCIONES_STOP = {_SECCION_GH, _SECCION_SSO, _SECCION_BACKUP}
+    _ESTILOS_TITULO_DOC = {"Título 1 AMSA", "Título 2 AMSA"}
 
     for p in doc_prev.paragraphs:
         t = p.text.strip()
@@ -480,11 +495,14 @@ def actualizar_secciones_word(
             _save_buf()
             clave_actual = _N2K[t]
             buf = []
-        elif t in _SECCIONES_STOP and clave_actual is None:
-            # Solo detener antes de entrar a una compañía (nivel documento).
-            # Si clave_actual ya está seteada, "Accidentabilidad" es un subtítulo
-            # de Hechos Relevantes → se agrega al buf como contenido normal.
-            pass
+        elif t in _SECCIONES_STOP and p.style.name in _ESTILOS_TITULO_DOC:
+            # Sección de nivel documento con estilo de título → siempre termina el bloque
+            # actual, aunque estemos dentro de una compañía (ej: "Accidentabilidad Back-up"
+            # después de FCAB). "Accidentabilidad" como sub-sección dentro de Hechos
+            # Relevantes usa otro estilo y no entra aquí.
+            _save_buf()
+            clave_actual = None
+            buf = []
         elif clave_actual:
             buf.append(t)
     _save_buf()

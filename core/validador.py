@@ -689,6 +689,7 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         # Extraer números solo del segmento de desviación (antes del status)
         linea_dev = _truncar_en_status(linea)
         linea_dev = re.sub(r' ', '', linea_dev)
+        linea_dev = re.sub(r'([+\-])\s(\d)', r'\1\2', linea_dev)
         numeros = _numeros_de_linea(linea_dev)
         if not numeros:
             continue
