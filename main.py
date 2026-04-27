@@ -222,8 +222,7 @@ def _construir_doc(
     if INCLUIR_ESTADO_FASES_DESARROLLO:
         agregar_estado_fases_desarrollo(doc, excel_madre)
 
-    doc.add_page_break()
-    agregar_titulo(doc, "Gestión Hídrica", nivel=2)
+    agregar_titulo(doc, "Gestión Hídrica", nivel=2, nueva_pagina=True)
     if incluir_gh:
         img_hidrica = exportar_imagen_excel(excel_madre, "Gestión Hídrica", "A3:W20", "gestion_hidrica.png")
         agregar_imagen(doc, img_hidrica, 19, 3.24, "")
@@ -232,8 +231,7 @@ def _construir_doc(
         if not es_parcial:
             print("  → Gestión Hídrica: En espera de envío información")
 
-    doc.add_page_break()
-    agregar_titulo(doc, "Accidentabilidad", nivel=2)
+    agregar_titulo(doc, "Accidentabilidad", nivel=2, nueva_pagina=True)
     if incluir_sso:
         img_semanal = exportar_imagen_excel(excel_indicadores, "Informe Viernes", "A29:M41", "valor_semanal.png")
         img_mensual = exportar_imagen_excel(excel_indicadores, "Informe Viernes", "A15:M27", "valor_mensual.png")
@@ -282,8 +280,7 @@ def _construir_doc(
     for clave in ORDEN_OFICIAL:
         cfg = CONFIG_COMPANIAS[clave]
         texto_compania = informes.get(clave, "")
-        doc.add_page_break()
-        agregar_titulo(doc, cfg["nombre"], nivel=1)
+        agregar_titulo(doc, cfg["nombre"], nivel=1, nueva_pagina=True)
         es_seleccionada = (faenas_con_excel is None or clave in faenas_con_excel)
         if not texto_compania or (not es_seleccionada and _MSG_PENDIENTE in texto_compania):
             agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
@@ -295,8 +292,7 @@ def _construir_doc(
             procesador(doc, texto_compania, excel_para_faena)
 
     # Accidentabilidad Back-up — siempre al final, después de todas las faenas
-    doc.add_page_break()
-    agregar_titulo(doc, "Accidentabilidad Back-up", nivel=1)
+    agregar_titulo(doc, "Accidentabilidad Back-up", nivel=1, nueva_pagina=True)
     if incluir_sso:
         def _obtener_wb_madre():
             wb = _workbooks_abiertos.get(excel_madre)

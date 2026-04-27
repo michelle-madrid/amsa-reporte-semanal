@@ -23,7 +23,7 @@ def _a_float(s):
     - decimal con punto:            "92.5"       → 92.5
     - miles + decimal punto:        "1,234,567.89" → 1234567.89
     """
-    s = str(s).strip().lstrip("+")
+    s = str(s).strip().replace(' ', '').lstrip("+")
     if re.match(r'^-?\d{1,3}(,\d{3})+$', s):
         s = s.replace(",", "")
     elif re.match(r'^-?\d{1,3}(,\d{3})+\.\d+$', s):
@@ -99,7 +99,7 @@ def _encontrar_en_fila(v_abs, nums_fila, tol=None, signed_val=None):
 
 # ── Extracción de números desde líneas ────────────────────────────────────────
 
-_PAT_NUMERO = re.compile(r'[+\-]?\d[\d.,]*')
+_PAT_NUMERO = re.compile(r'[+\-] ?\d[\d.,]*|[+\-]?\d[\d.,]*')
 
 def _numeros_de_linea(linea):
     """
@@ -107,6 +107,11 @@ def _numeros_de_linea(linea):
     Devuelve lista de (raw_str, float_abs_redondeado).
     Descarta: cero, años (1900-2100), y duplicados en valor absoluto.
     """
+    # limpiar_texto_global inserta NBSP (U+00A0) entre el signo y el dígito para
+    # evitar saltos de línea en Word (ej. "-3.6" → " - 3.6").
+    # Si no se elimina, _PAT_NUMERO no detecta el signo y el número queda positivo.
+    linea = linea.replace(' ', '')
+    linea = linea.replace(' ', '')
     vistos = set()
     resultado = []
     for m in _PAT_NUMERO.finditer(linea):
@@ -500,14 +505,16 @@ def _agregar_acumulados_desde_excel(wb_com, nombre_hoja, tabla):
                 if pendientes[clave] is not None:
                     continue
                 if vn.startswith(clave):
-                    pcts = _PAT_PCT_TEXTO.findall(celda)
-                    nums = set()
-                    for p in pcts:
-                        f = _a_float(p.rstrip('%'))
-                        if f is not None:
-                            nums.add(round(f, 4))  # conserva signo
-                    if nums:
-                        tabla[clave] = (celda.strip()[:80], nums, None)  # signed
+                    # Extraer todos los números en orden (con signo), igual que en Word
+                    nums_lista = []
+                    seen_abs = set()
+                    for raw, v_abs in _numeros_de_linea(celda):
+                        v_signed = -v_abs if raw.lstrip().startswith('-') else v_abs
+                        if v_abs not in seen_abs:
+                            seen_abs.add(v_abs)
+                            nums_lista.append(v_signed)
+                    if nums_lista:
+                        tabla[clave] = (celda.strip()[:80], nums_lista, None)
                         pendientes[clave] = True
         if all(v is not None for v in pendientes.values()):
             break
@@ -681,6 +688,7 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
 
         # Extraer números solo del segmento de desviación (antes del status)
         linea_dev = _truncar_en_status(linea)
+        linea_dev = re.sub(r' ', '', linea_dev)
         numeros = _numeros_de_linea(linea_dev)
         if not numeros:
             continue
@@ -719,24 +727,43 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         if excel_label:
             kpi["excel_label"] = excel_label
             print(f"      ↳ Celda Excel: '{excel_label}'")
-            for raw, v_abs in numeros:
-                tol = _tol_para(raw)
-                if es_acumulado:
-                    v_signed = -v_abs if raw.lstrip().startswith('-') else v_abs
-                    ok, cercano = _encontrar_en_fila(v_abs, nums_fila, tol=tol, signed_val=v_signed)
-                else:
+            if es_acumulado and isinstance(nums_fila, list):
+                # Comparación posicional: Word[i] ↔ Excel[i] en el mismo orden.
+                # Se compara en valor absoluto: el signo lo da el texto cualitativo
+                # ("mayor/menor producción"), no los números en sí.
+                for i, (raw, v_abs_w) in enumerate(numeros):
+                    tol = _tol_para(raw)
+                    if i < len(nums_fila):
+                        v_abs_e = abs(nums_fila[i])
+                        ok = abs(v_abs_w - v_abs_e) <= tol
+                        cercano = round(nums_fila[i], 4)
+                    else:
+                        ok = False
+                        cercano = None
+                    marca = "✓" if ok else "✗"
+                    dif = round(abs(v_abs_w - abs(cercano)), 4) if not ok and cercano is not None else None
+                    if ok:
+                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}")
+                    else:
+                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}  (dif: {dif})")
+                        n_warn += 1
+                        kpi["estado"] = "revisar"
+                    kpi["valores"].append({"word": raw, "excel": cercano, "ok": ok, "dif": dif})
+            else:
+                for raw, v_abs in numeros:
+                    tol = _tol_para(raw)
                     ok, cercano = _encontrar_en_fila(v_abs, nums_fila, tol=tol)
-                marca = "✓" if ok else "✗"
-                if ok:
-                    print(f"      {raw:>14}  →  {marca}  Excel = {cercano}")
-                else:
-                    print(f"      {raw:>14}  →  {marca}  Excel = {cercano}  (dif: {abs(v_abs - cercano):.4f})")
-                    n_warn += 1
-                    kpi["estado"] = "revisar"
-                kpi["valores"].append({
-                    "word": raw, "excel": cercano, "ok": ok,
-                    "dif": round(abs(v_abs - abs(cercano)), 4) if not ok and cercano is not None else None,
-                })
+                    marca = "✓" if ok else "✗"
+                    if ok:
+                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}")
+                    else:
+                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}  (dif: {abs(v_abs - cercano):.4f})")
+                        n_warn += 1
+                        kpi["estado"] = "revisar"
+                    kpi["valores"].append({
+                        "word": raw, "excel": cercano, "ok": ok,
+                        "dif": round(abs(v_abs - abs(cercano)), 4) if not ok and cercano is not None else None,
+                    })
 
             # Validar indicador de estado (bajo PM / sobre PM / en línea)
             status_word = _extraer_status_word(linea)

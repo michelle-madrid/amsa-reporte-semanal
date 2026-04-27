@@ -268,7 +268,7 @@ def agregar_linea_acumulado(doc, texto):
   agregar_texto(doc, texto)
 
 # Agrega al documento el elemento indicado por su nombre.
-def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None):
+def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None, nueva_pagina=False):
     texto = limpiar_texto_global(texto)
     estilos_por_nivel = {1: "Título 1 AMSA", 2: "Título 2 AMSA"}
     estilo = estilos_por_nivel.get(nivel, "Título 1 AMSA")
@@ -283,6 +283,8 @@ def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None):
     p.space_before = Pt(12)
     p.space_after = Pt(6)
     p.paragraph_format.keep_with_next = True
+    if nueva_pagina:
+        p.paragraph_format.page_break_before = True
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
