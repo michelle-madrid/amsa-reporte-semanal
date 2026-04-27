@@ -7,7 +7,7 @@ import re
 def extraer_texto_word(ruta_word):
     try:
         doc = Document(ruta_word)
-        texto = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
+        texto = "\n".join([p.text.strip() for p in doc.paragraphs if p.text.strip()])
         return texto
     except Exception as e:
         errores.append(f"[ERROR] No se pudo leer el informe {ruta_word}: {e}")

@@ -264,6 +264,11 @@ REGLAS_LT_EXCLUIR = {
     "NUMERO_ORDINAL",           # formatos numéricos
     "ES_SPLIT_WORDS",           # separación de palabras compuestas
     "ENERO_01",                 # sugiere quitar ceros en fechas (06 → 6): no aplica
+    # Falsos positivos en compuestos técnicos N+N donde el primer sustantivo
+    # termina en -ado/-ido (nominalizaciones verbales: "tensado cadena",
+    # "chancado primario", "lixiviado cobre"). LT los confunde con participios
+    # adjetivos que deberían concordar en género con el sustantivo siguiente.
+    "AGREEMENT_PARTICIPLE_NOUN",
 }
 CATEGORIAS_LT_EXCLUIR = {"TYPOGRAPHY", "CASING", "STYLE", "TYPOS"}
 

@@ -1,4 +1,4 @@
-"""Utilidades de limpieza, clasificación y normalización de texto."""
+﻿"""Utilidades de limpieza, clasificación y normalización de texto."""
 
 import re
 import unicodedata
@@ -276,7 +276,7 @@ def limpiar_texto_global(texto):
   if not texto:
     return texto
 
-  texto = str(texto).strip()
+  texto = str(texto).strip().strip(' ').strip()
 
   # normalizar tabulaciones a espacio simple
   texto = re.sub(r'\t+', ' ', texto)
@@ -300,8 +300,8 @@ def limpiar_texto_global(texto):
   texto = re.sub(r'(?i)\balto\s+potencial\s*\(\s*aap\s*\)', 'Alto Potencial (AAP)', texto)
 
   # eliminar ceros a la izquierda en números enteros (ej: 07 → 7), sin tocar decimales ni horas
-  # (?<!:) evita borrar el cero de minutos en horas como 15:00 o 08:30
-  texto = re.sub(r'(?<!:)\b0+(\d+)\b', r'\1', texto)
+  # (?<![:,.]) evita borrar ceros tras separadores: horas (15:00), decimales (3.05), miles (32,061)
+  texto = re.sub(r'(?<![:,.])\b0+(\d+)\b', r'\1', texto)
 
   # pasar a minúscula Bajo / Sobre / En línea cuando NO van al inicio real del texto
   def bajar_estado(match):
@@ -331,6 +331,10 @@ def limpiar_texto_global(texto):
     texto = texto[:-1] + "."
   elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
     texto = texto + "."
+
+  # NBSP antes del signo negativo (evita corte antes de '-') +
+  # WORD JOINER U+2060 entre '-' y el digito (evita que Word lo trate como guion).
+  texto = re.sub(r' (-\d)', lambda m: ' ' + m.group(1)[0] + ' ' + m.group(1)[1:], texto)
 
   return texto
 

@@ -508,17 +508,22 @@ def _ordenar_hoja_sso(wb):
                     col_fecha = c
             if not col_id and not col_fecha:
                 continue
-            data_range = ws.Range(_cr(ws, h_row, min_c), _cr(ws, last_row, last_c))
+            primera_fila_datos = h_row + 1
+            if primera_fila_datos > last_row:
+                continue
+            # Ordenar solo las filas de datos (excluyendo el encabezado del rango)
+            # para que Excel no pueda arrastrar la fila de encabezado al ordenar.
+            data_range = ws.Range(_cr(ws, primera_fila_datos, min_c), _cr(ws, last_row, last_c))
             if col_id and col_fecha:
                 data_range.Sort(
-                    Key1=_cr(ws, h_row, col_id),    Order1=1,
-                    Key2=_cr(ws, h_row, col_fecha),  Order2=1,
-                    Header=1, Orientation=1,
+                    Key1=_cr(ws, primera_fila_datos, col_id),    Order1=1,
+                    Key2=_cr(ws, primera_fila_datos, col_fecha),  Order2=1,
+                    Header=2, Orientation=1,
                 )
             elif col_id:
-                data_range.Sort(Key1=_cr(ws, h_row, col_id), Order1=1, Header=1, Orientation=1)
+                data_range.Sort(Key1=_cr(ws, primera_fila_datos, col_id), Order1=1, Header=2, Orientation=1)
             else:
-                data_range.Sort(Key1=_cr(ws, h_row, col_fecha), Order1=1, Header=1, Orientation=1)
+                data_range.Sort(Key1=_cr(ws, primera_fila_datos, col_fecha), Order1=1, Header=2, Orientation=1)
             tablas_ordenadas += 1
         print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
     except Exception as e:
@@ -712,3 +717,19 @@ def extraer_resumen_excel(ruta_excel):
     except Exception as e:
         state.errores.append(f"[ERROR] No se pudo extraer resumen del Excel madre: {e}")
         return "Resumen no disponible."
+
+
+# Lee las líneas "Acumulado" de Planta Hidro OXE de CEN desde el Excel madre (B139:B140).
+def extraer_acumulados_oxe_cen(ruta_excel):
+    try:
+        wb = openpyxl.load_workbook(ruta_excel, data_only=True)
+        sheet = wb["CEN"]
+        lineas = []
+        for row in (139, 140):
+            val = sheet[f"B{row}"].value
+            if val:
+                lineas.append(str(val).strip())
+        return lineas
+    except Exception as e:
+        state.errores.append(f"[ERROR] No se pudo leer acumulados OXE CEN (B139:B140): {e}")
+        return []

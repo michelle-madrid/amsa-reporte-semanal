@@ -410,6 +410,12 @@
   }
   .semana-memoria .sm-week  { font-weight: 700; }
   .semana-memoria .sm-det   { opacity: .75; margin-top: 2px; font-size: 11px; }
+  .semana-memoria .sm-aviso {
+    margin-top: 8px; padding: 7px 12px;
+    background: #FFF5F5; border: 1.5px solid var(--err);
+    border-radius: 5px; color: var(--err);
+    font-size: 12px; font-weight: 700; line-height: 1.4;
+  }
 
   /* ── Tags ───────────────────────────────────────────────────────── */
   .tag { display: inline-block; padding: 2px 8px; border-radius: 4px;
@@ -593,6 +599,7 @@
         <div id="semanaMemoria" class="semana-memoria" style="display:none;">
           <div class="sm-week" id="semanaMemoriaTitulo"></div>
           <div class="sm-det"  id="semanaMemoriaDetalle"></div>
+          <div class="sm-aviso" id="semanaAviso" style="display:none;">⚠ Revisar referencias Excel Base de CMZ, usualmente cambian nombre pestaña y configuración columnas/filas</div>
         </div>
       </div>
 
@@ -1232,6 +1239,15 @@ function aplicarCalendario(numSemana) {
     document.getElementById('semanaMemoriaTitulo').textContent =
       `Semana ${numSemana}: del ${datos.dia_inicio} ${mi} al ${datos.dia_fin} ${mf}`;
     document.getElementById('semanaMemoriaDetalle').textContent = datos.detalles || '';
+
+    const avisoEl = document.getElementById('semanaAviso');
+    if (avisoEl) {
+      let numDias = 7;
+      const mDias = (datos.detalles || '').match(/[Ii]nforme\s+(\d+)\s+d[íi]/);
+      if (mDias) numDias = parseInt(mDias[1]);
+      avisoEl.style.display = numDias !== 7 ? '' : 'none';
+    }
+
     mem.style.display = '';
   }
   return true;

@@ -2,6 +2,8 @@
 
 from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.oxml import parse_xml
+from docx.oxml.ns import qn
 
 from config import CONFIG_COMPANIAS
 from state import errores
@@ -208,7 +210,15 @@ def agregar_circulo_blanco_manual(doc, texto, left_indent_cm=1.9, bullet_indent_
   p.paragraph_format.left_indent = Cm(left_indent_cm)
   p.paragraph_format.first_line_indent = Cm(bullet_indent_cm - left_indent_cm)
 
-  run_bullet = p.add_run("o  ")
+  # Tab stop en la posición left_indent para que el texto siempre arranque
+  # exactamente ahí, sin depender del ancho de los espacios (que varía con
+  # la justificación). 1 pt = 20 twips.
+  tab_twips = round(Cm(left_indent_cm).pt * 20)
+  ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+  pPr = p._element.get_or_add_pPr()
+  pPr.append(parse_xml(f'<w:tabs {ns}><w:tab w:val="left" w:pos="{tab_twips}"/></w:tabs>'))
+
+  run_bullet = p.add_run("o\t")
   run_bullet.font.name = "Arial"
   run_bullet.font.size = Pt(11)
   run_bullet.bold = False
@@ -258,7 +268,7 @@ def agregar_linea_acumulado(doc, texto):
   agregar_texto(doc, texto)
 
 # Agrega al documento el elemento indicado por su nombre.
-def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None):
+def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None, nueva_pagina=False):
     texto = limpiar_texto_global(texto)
     estilos_por_nivel = {1: "Título 1 AMSA", 2: "Título 2 AMSA"}
     estilo = estilos_por_nivel.get(nivel, "Título 1 AMSA")
@@ -273,6 +283,8 @@ def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None):
     p.space_before = Pt(12)
     p.space_after = Pt(6)
     p.paragraph_format.keep_with_next = True
+    if nueva_pagina:
+        p.paragraph_format.page_break_before = True
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_texto(doc, texto, bold=False, color=None, justificar=True):

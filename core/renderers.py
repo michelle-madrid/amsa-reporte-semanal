@@ -9,9 +9,19 @@ from state import errores
 from utils.text_utils import *
 from utils.text_utils import _quitar_dos_puntos_inicio
 from utils.word_utils import *
-from utils.excel_utils import exportar_imagen_excel
+from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen
 from core.extractores import *
 
+
+def _agregar_tab_stop(p, posicion):
+  """Inserta un tab stop izquierdo en `posicion` (Cm/Pt/EMU) para que el texto
+  quede siempre alineado, independientemente de cómo Word estire los espacios
+  al justificar el párrafo."""
+  tab_twips = round(posicion.pt * 20)
+  ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+  p._element.get_or_add_pPr().append(
+    parse_xml(f'<w:tabs {ns}><w:tab w:val="left" w:pos="{tab_twips}"/></w:tabs>')
+  )
 
 # Orquesta la construcción del bloque de una faena usando su procesador correspondiente.
 def construir_bloque_faena(doc, clave, texto_word, excel_madre, orden_secciones=None):
@@ -31,7 +41,7 @@ def mlp_render_medio_ambiente(doc, lineas):
     if not texto:
       continue
 
-    texto_limpio = re.sub(r"^[•·\-\s]+", "", texto).strip()
+    texto_limpio = re.sub(r"^(o\s+|[•·\-\s]+)", "", texto).strip()
     texto_limpio = limpiar_texto_global(texto_limpio)
 
     if texto_limpio.startswith("Fuente:") or texto_limpio.startswith("Nota:"):
@@ -56,6 +66,14 @@ def mlp_render_medio_ambiente(doc, lineas):
 
     if es_subtitulo:
       agregar_viñeta(doc, texto_limpio, nivel=2, espacio_despues=6)
+      subtitulo_actual = texto_limpio
+      dentro_de_fecha = False
+      continue
+
+    # Encabezado corto que termina en ":" → viñeta sin negrita (e.g. "Eventos reportados a la SMA:")
+    if texto_limpio.endswith(":") and len(texto_limpio) <= 60:
+      nivel = 3 if subtitulo_actual else 2
+      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=nivel, espacio_despues=6)
       subtitulo_actual = texto_limpio
       dentro_de_fecha = False
       continue
@@ -98,8 +116,7 @@ def mlp_render_medio_ambiente(doc, lineas):
 
 # Inserta la sección de estado de fases de desarrollo con imagen y criterios.
 def agregar_estado_fases_desarrollo(doc, excel_madre):
-  doc.add_page_break()
-  agregar_titulo(doc, "Estado de Fases de Desarrollo para medir adhesión al plan minero:", nivel=2)
+  agregar_titulo(doc, "Estado de Fases de Desarrollo para medir adhesión al plan minero:", nivel=2, nueva_pagina=True)
   img_fases = exportar_imagen_excel(excel_madre, "Triger - D°Mina", "B2:S21", "estado_fases.png")
   agregar_imagen(doc, img_fases, 19, 3.12, "")
 
@@ -127,7 +144,7 @@ def _validar_clasificacion_acumulados(lineas_acum, clave):
         clausulas = re.split(r"\s+y\s+", linea)
         for clausula in clausulas:
             tc = normalizar_texto_clave(clausula)
-            pcts = _PAT_PCT_ACUM.findall(clausula)
+            pcts = _PAT_PCT_ACUM.findall(re.sub(r'([+\-])\s(\d)', r'\1\2', clausula))
             if not pcts:
                 continue
 
@@ -441,18 +458,37 @@ def mlp_render_asuntos_publicos(doc, lineas):
   # 4. Si hay bullets, es estructura de 3 niveles; si no, 2 niveles
   hay_bullets = 'bullet' in tipos
 
+  # 4b. En estructura 3 niveles: 'sub' que sigue a 'bullet'/'circulo' es sub-ítem → 'circulo'
+  if hay_bullets:
+    for i in range(1, len(tipos)):
+      if tipos[i] == 'sub' and tipos[i - 1] in ('bullet', 'circulo'):
+        tipos[i] = 'circulo'
+
   # 5. Renderizar — solo círculos blancos del template (Viñeta 2 / Viñeta 3), sin negritas
+  # intro_activo: True cuando el circulo anterior terminó en ":" → los siguientes
+  # son sub-ítems de ese intro y van a nivel=3; se resetea al ver un 'sub'.
+  intro_activo = False
   for texto, tipo in zip(textos, tipos):
     if tipo == 'sub':
       _ap_render_subtitulo(doc, texto)
+      intro_activo = False
     elif tipo == 'bullet':
-      # En estructura 3 niveles: Viñeta 2 (círculo intermedio)
-      # En estructura 2 niveles: Viñeta 2 (único nivel de círculo)
       agregar_viñeta_sin_negrita(doc, texto, nivel=2, espacio_despues=6)
+      intro_activo = False
     else:
-      # circulo: nivel 3 si hay bullets (estructura 3 niveles), nivel 2 si no
-      nivel = 3 if hay_bullets else 2
+      # circulo: nivel 3 en estructura con bullets, o cuando es sub-ítem de intro
+      # Si intro_activo pero el prefijo antes de ':' supera 20 chars, es ítem top-level nuevo
+      if intro_activo and ':' in texto and texto.index(':') > 20:
+        intro_activo = False
+      if hay_bullets:
+        nivel = 3
+      else:
+        nivel = 3 if intro_activo else 2
       agregar_viñeta_sin_negrita(doc, texto, nivel=nivel, espacio_despues=6)
+      # Una línea que termina en ":" abre un bloque de sub-ítems
+      if texto.endswith(':'):
+        intro_activo = True
+      # intro_activo solo se cierra con 'sub', no con cada circulo que termina en '.'
 
 # Renderiza contenido específico dentro del documento Word.
 def cen_render_catodos(doc, texto_compania, excel_madre=None):
@@ -520,14 +556,20 @@ def cen_render_catodos(doc, texto_compania, excel_madre=None):
     for linea in bloque_oxe:
       texto_base = re.sub(r"^[•○o·\-\s\u200b\ufeff]+", "", linea).strip()
 
+      # Saltar "(Resultado vs Plan Mensual...)" y cualquier Acumulado del Word:
+      # se reemplazan por las celdas B139/B140 del Excel al final del bloque
       if (
-        texto_base.startswith("Acumulado al mes")
+        texto_base.startswith("(")
+        or texto_base.startswith("Acumulado al mes")
         or texto_base.startswith("Acumulado al año")
         or texto_base.startswith("Respecto del Plan")
       ):
-        agregar_linea_acumulado(doc, texto_base)
-      else:
-        agregar_viñeta(doc, linea, nivel=2, espacio_despues=6)
+        continue
+      agregar_viñeta(doc, linea, nivel=2, espacio_despues=6)
+    if excel_madre:
+      lineas_acum = extraer_acumulados_oxe_cen(excel_madre)
+      for linea_acum in lineas_acum:
+        agregar_linea_acumulado(doc, linea_acum)
 
 # Renderiza contenido específico dentro del documento Word.
 def ant_render_medio_ambiente(doc, lineas):
@@ -759,6 +801,9 @@ def cen_render_medio_ambiente(doc, lineas):
     texto = re.sub(r"^(o\s+|[•·\-\s]+)", "", texto).strip()
     texto = limpiar_texto_global(texto)
 
+    if not texto:
+      continue
+
     if texto.startswith("Fuente:") or texto.startswith("Nota:"):
       p = doc.add_paragraph(style="Normal AMSA")
       p.paragraph_format.left_indent = Cm(1.27)
@@ -783,7 +828,7 @@ def cen_render_medio_ambiente(doc, lineas):
     if es_subtitulo:
       agregar_circulo_blanco_manual(
         doc,
-        texto.strip(),
+        texto,
         left_indent_cm=1.9,
         bullet_indent_cm=1.45,
         espacio_despues=6
@@ -794,7 +839,7 @@ def cen_render_medio_ambiente(doc, lineas):
     if subtitulo_actual:
       agregar_circulo_blanco_manual(
         doc,
-        texto.strip(),
+        texto,
         left_indent_cm=3.0,
         bullet_indent_cm=2.55,
         espacio_despues=6
@@ -802,7 +847,7 @@ def cen_render_medio_ambiente(doc, lineas):
     else:
       agregar_circulo_blanco_manual(
         doc,
-        texto.strip(),
+        texto,
         left_indent_cm=1.9,
         bullet_indent_cm=1.45,
         espacio_despues=6
@@ -899,7 +944,7 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   while i < len(contenido):
     texto = contenido[i]
 
-    if re.match(r"^\d{1,2}\sde\s\w+\sde\s\d{4}:", texto):
+    if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?\sde\s\w+\sde\s\d{4}:", texto):
       if i + 1 < len(contenido) and contenido[i + 1].strip().startswith("Restricción:"):
         texto = texto.strip() + " " + contenido[i + 1].strip()
         i += 1
@@ -910,8 +955,9 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
       p.paragraph_format.space_after = Pt(6)
       p.paragraph_format.left_indent = Cm(1.27)
       p.paragraph_format.first_line_indent = Cm(-0.42)
+      _agregar_tab_stop(p, Cm(1.27))
 
-      run_bullet = p.add_run("○  ")
+      run_bullet = p.add_run("○\t")
       run_bullet.font.name = "Arial"
       run_bullet.font.size = Pt(11)
       run_bullet.bold = False
@@ -1090,8 +1136,7 @@ def procesar_cen(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="CEN")
   doc.add_page_break()
   agregar_produccion_semana_faena(doc, "CEN", excel_madre)
-  doc.add_paragraph("") 
-  agregar_titulo(doc, "Principales Desviaciones", nivel=2)
+  agregar_titulo(doc, "Principales Desviaciones", nivel=2, nueva_pagina=True)
   validar_acumulados_principales_desviaciones(texto_compania, "CEN", es_seleccionada=excel_madre is not None)
   procesar_seccion(
     doc,
@@ -1162,8 +1207,10 @@ def cmz_render_planta(doc, texto_compania, excel_madre=None):
 
   if acumulados:
     doc.add_paragraph("")
-    for linea in acumulados:
+    for i, linea in enumerate(acumulados):
       agregar_texto(doc, linea)
+      if i < len(acumulados) - 1:
+        doc.add_paragraph("")
 
   for texto in otros:
     print(f"[WARNING] CMZ - Planta: línea no clasificada -> '{texto}'")
@@ -1281,8 +1328,9 @@ def fcab_render_medio_ambiente(doc, lineas):
       p.paragraph_format.space_after = Pt(6)
       p.paragraph_format.left_indent = Cm(3.0)
       p.paragraph_format.first_line_indent = Cm(-0.4)
+      _agregar_tab_stop(p, Cm(3.0))
 
-      run_bullet = p.add_run("o  ")
+      run_bullet = p.add_run("o\t")
       run_bullet.font.name = "Arial"
       run_bullet.font.size = Pt(11)
       run_bullet.bold = False
@@ -1308,8 +1356,9 @@ def fcab_render_medio_ambiente(doc, lineas):
       p.paragraph_format.space_after = Pt(6)
       p.paragraph_format.left_indent = Cm(1.9)
       p.paragraph_format.first_line_indent = Cm(-0.4)
+      _agregar_tab_stop(p, Cm(1.9))
 
-      run_bullet = p.add_run("o  ")
+      run_bullet = p.add_run("o\t")
       run_bullet.font.name = "Arial"
       run_bullet.font.size = Pt(11)
       run_bullet.bold = False
