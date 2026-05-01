@@ -1,4 +1,4 @@
-"""Validación cruzada de KPIs entre texto Word y tabla Excel madre por compañía."""
+﻿"""Validación cruzada de KPIs entre texto Word y tabla Excel madre por compañía."""
 
 import re
 import time
@@ -53,7 +53,10 @@ def _normalizar_excel(valor):
             candidatos.append(round(v * 100, 4))
         return candidatos
     if isinstance(valor, str):
-        f = _a_float(re.sub(r"[^\d.,+\-]", "", valor))
+        s = valor.strip()
+        if re.fullmatch(r'[-–—]+', s):
+            return [100.0]
+        f = _a_float(re.sub(r"[^\d.,+\-]", "", s))
         if f is not None:
             return [round(f, 4)]
     return []
@@ -111,6 +114,7 @@ def _numeros_de_linea(linea):
     # evitar saltos de línea en Word (ej. "-3.6" → " - 3.6").
     # Si no se elimina, _PAT_NUMERO no detecta el signo y el número queda positivo.
     linea = linea.replace(' ', '')
+    linea = linea.replace('‑', '-')
     linea = linea.replace(' ', '')
     vistos = set()
     resultado = []
@@ -478,14 +482,49 @@ def _leer_desviaciones_dinamico(wb_com, nombre_hoja, rango_explicito=None):
 
 _PAT_PCT_TEXTO = re.compile(r'[+\-]?\d+(?:[.,]\d+)?%')
 
+_ACUMULADOS_CELDAS_FIJAS = {
+    # nombre_hoja: [(clave_norm, celda), ...]
+    "CMZ": [
+        ("acumulado al mes", "B62"),
+        ("acumulado al ano", "B63"),
+    ],
+}
+
 def _agregar_acumulados_desde_excel(wb_com, nombre_hoja, tabla):
     """
     Lee la hoja completa (UsedRange) en una sola llamada COM, busca las celdas
     de texto que empiezan con 'Acumulado al mes' y 'Acumulado al año', extrae
     los porcentajes y los agrega a la tabla con claves normalizadas.
+    Para hojas con celdas fijas (ej. CMZ B62/B63) las lee directamente.
     """
     try:
-        ws     = wb_com.Worksheets(nombre_hoja)
+        ws = wb_com.Worksheets(nombre_hoja)
+    except Exception:
+        return
+
+    # ── Celdas fijas por hoja ─────────────────────────────────────────────────
+    if nombre_hoja in _ACUMULADOS_CELDAS_FIJAS:
+        for clave, celda_ref in _ACUMULADOS_CELDAS_FIJAS[nombre_hoja]:
+            try:
+                val = ws.Range(celda_ref).Value
+            except Exception:
+                continue
+            if val is None:
+                continue
+            texto = str(val).strip()
+            nums_lista = []
+            seen_abs = set()
+            for raw, v_abs in _numeros_de_linea(texto):
+                v_signed = -v_abs if raw.lstrip().startswith('-') else v_abs
+                if v_abs not in seen_abs:
+                    seen_abs.add(v_abs)
+                    nums_lista.append(v_signed)
+            if nums_lista:
+                tabla[clave] = (texto[:80], nums_lista, None)
+        return
+
+    # ── Escaneo dinámico (resto de hojas) ─────────────────────────────────────
+    try:
         valores = ws.UsedRange.Value
     except Exception:
         return
@@ -505,7 +544,6 @@ def _agregar_acumulados_desde_excel(wb_com, nombre_hoja, tabla):
                 if pendientes[clave] is not None:
                     continue
                 if vn.startswith(clave):
-                    # Extraer todos los números en orden (con signo), igual que en Word
                     nums_lista = []
                     seen_abs = set()
                     for raw, v_abs in _numeros_de_linea(celda):
@@ -693,6 +731,10 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         numeros = _numeros_de_linea(linea_dev)
         if not numeros:
             continue
+        # Solo comparar los dos primeros valores (UNID + %); el resto son
+        # números extra del texto (fases, fechas, etc.) que no corresponden.
+        if len(numeros) > 2:
+            numeros = numeros[:2]
         lineas_revisadas += 1
         linea_corta = linea if len(linea) <= 78 else linea[:75] + "..."
         print(f"\n    {linea_corta}")
@@ -724,6 +766,13 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         else:
             excel_label, nums_fila, status_excel = None, None, None
             es_acumulado = False
+
+        if es_acumulado:
+            # Solo comparar el % (último valor); descartar la unidad.
+            if len(numeros) > 1:
+                numeros = numeros[-1:]
+            if isinstance(nums_fila, list) and len(nums_fila) > 1:
+                nums_fila = nums_fila[-1:]
 
         if excel_label:
             kpi["excel_label"] = excel_label
