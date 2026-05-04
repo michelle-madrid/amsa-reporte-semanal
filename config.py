@@ -120,22 +120,23 @@ CONFIG_COMPANIAS = {
 CONFIG_CELDAS_DESVIACIONES = {
     "MLP": {
         # ── Mina ──────────────────────────────────────────────────────────────
-        "Movimiento Mina":          ("E39", "G39", "H39"),
-        "Extracción":               ("E40", "G40", "H40"),
-        "Extracción Lastre":        ("E41", "G41", "H41"),
-        "Extracción Mineral":       ("E42", "G42", "H42"),
-        "Remanejo":                 ("E43", "G43", "H43"),
-        # ── Concentradora (fila 44 = cabecera de sección) ─────────────────────
-        "Mineral Procesado":        ("E45", "G45", "H45"),
-        "Ley Cu":                   ("E46", "G46", "H46"),
-        "Recuperación Cu":          ("E47", "G47", "H47"),
-        "Cu Fino Producido":        ("E48", "G48", "H48"),
-        "Concentrado Producido":    ("E49", "G49", "H49"),
-        "Concentrado Filtrado":     ("E50", "G50", "H50"),
-        "Cu Fino Filtrado Pagable": ("E51", "G51", "H51"),
-        "Molibdeno":               ("E52", "G52", "H52"),
-        "Arenas Depositadas":       ("E53", "G53", "H53"),
-        "Arenas Compactadas":       ("E54", "G54", "H54"),
+        "Movimiento Mina":          ("E40", "G40", "H40"),
+        "Extracción":               ("E41", "G41", "H41"),
+        "Extracción Lastre":        ("E42", "G42", "H42"),
+        "Extracción Estéril":       ("E42", "G42", "H42"),
+        "Extracción Mineral":       ("E43", "G43", "H43"),
+        "Remanejo":                 ("E44", "G44", "H44"),
+        # ── Concentradora (fila 45 = cabecera de sección) ─────────────────────
+        "Mineral Procesado":        ("E46", "G46", "H46"),
+        "Ley Cu":                   ("E47", "G47", "H47"),
+        "Recuperación Cu":          ("E48", "G48", "H48"),
+        "Cu Fino Producido":        ("E49", "G49", "H49"),
+        "Concentrado Producido":    ("E50", "G50", "H50"),
+        "Concentrado Filtrado":     ("E51", "G51", "H51"),
+        "Cu Fino Filtrado Pagable": ("E52", "G52", "H52"),
+        "Molibdeno":               ("E53", "G53", "H53"),
+        "Arenas Depositadas":       ("E54", "G54", "H54"),
+        "Arenas Compactadas":       ("E55", "G55", "H55"),
     },
     "ANT": {
         # ── Mina ──────────────────────────────────────────────────────────────
@@ -179,6 +180,7 @@ CONFIG_CELDAS_DESVIACIONES = {
         # ── Cátodos — Planta Hidro MET ────────────────────────────────────────
         "Producción de Cátodos de Cu MET":          ("D125", "F125", "G125"),
         "Mineral Apilado MET":                      ("D126", "F126", "G126"),
+        "Mineral Apilado":                          ("D126", "F126"),
         "Mineral Beneficiado MET":                  ("D127", "F127", "G127"),
         "Ley de Cu MET":                            ("F128", "F128", "G128"),
         "Producción de ROM":                        ("D130", "F130", "G130"),

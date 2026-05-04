@@ -9,7 +9,7 @@ from state import errores
 from utils.text_utils import *
 from utils.text_utils import _quitar_dos_puntos_inicio
 from utils.word_utils import *
-from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen
+from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen, extraer_acumulados_cmz
 from core.extractores import *
 
 
@@ -34,7 +34,10 @@ def construir_bloque_faena(doc, clave, texto_word, excel_madre, orden_secciones=
 def mlp_render_medio_ambiente(doc, lineas):
   subtitulo_actual = None
   dentro_de_fecha = False
+  eventos_anunciados = 0   # cantidad declarada en "N evento(s) reportado(s)..."
+  eventos_renderizados = 0  # fechas ya renderizadas bajo el subtítulo actual
   patron_fecha = re.compile(r"^\d{1,2}\sde\s\w+\sde\s\d{4}")
+  patron_n_eventos = re.compile(r"^(\d+)\s+evento", re.IGNORECASE)
 
   for linea in lineas:
     texto = linea.strip()
@@ -56,6 +59,8 @@ def mlp_render_medio_ambiente(doc, lineas):
       run.font.size = Pt(11)
       subtitulo_actual = None
       dentro_de_fecha = False
+      eventos_anunciados = 0
+      eventos_renderizados = 0
       continue
 
     es_subtitulo = (
@@ -68,13 +73,25 @@ def mlp_render_medio_ambiente(doc, lineas):
       agregar_viñeta(doc, texto_limpio, nivel=2, espacio_despues=6)
       subtitulo_actual = texto_limpio
       dentro_de_fecha = False
+      eventos_anunciados = 0
+      eventos_renderizados = 0
       continue
 
-    # Encabezado corto que termina en ":" → viñeta sin negrita (e.g. "Eventos reportados a la SMA:")
+    # Encabezado corto que termina en ":" → viñeta sin negrita (e.g. "N eventos reportados a la SMA:")
     if texto_limpio.endswith(":") and len(texto_limpio) <= 60:
-      nivel = 3 if subtitulo_actual else 2
-      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=nivel, espacio_despues=6)
-      subtitulo_actual = texto_limpio
+      # "N evento(s)..." siempre va al nivel 2; otros encabezados anidados van al 3
+      m_n = patron_n_eventos.match(texto_limpio)
+      if m_n:
+        agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=2, espacio_despues=6)
+        subtitulo_actual = texto_limpio
+        eventos_anunciados = int(m_n.group(1))
+        eventos_renderizados = 0
+      else:
+        nivel = 3 if subtitulo_actual else 2
+        agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=nivel, espacio_despues=6)
+        subtitulo_actual = texto_limpio
+        eventos_anunciados = 0
+        eventos_renderizados = 0
       dentro_de_fecha = False
       continue
 
@@ -86,30 +103,34 @@ def mlp_render_medio_ambiente(doc, lineas):
 
     match_fecha = patron_fecha.match(texto_limpio)
 
+    # Determinar si aún quedan eventos anunciados por renderizar
+    en_nivel_profundo = subtitulo_actual and (
+      eventos_anunciados == 0 or eventos_renderizados < eventos_anunciados
+    )
+
     if match_fecha:
-      # Línea con fecha: círculo del template + fecha en negrita
       dentro_de_fecha = True
-      nivel_fecha = 3 if subtitulo_actual else 2
+      nivel_fecha = 3 if en_nivel_profundo else 2
       agregar_viñeta_fecha_inicial(doc, texto_limpio, nivel=nivel_fecha, espacio_despues=6)
+      if en_nivel_profundo:
+        eventos_renderizados += 1
 
     elif dentro_de_fecha:
-      # Párrafo de continuación tras una fecha: alineado con el texto del nivel
       p = doc.add_paragraph(style="Normal AMSA")
       p.paragraph_format.line_spacing = 1.0
       p.paragraph_format.space_before = Pt(0)
       p.paragraph_format.space_after = Pt(6)
-      left = Cm(3.0) if subtitulo_actual else Cm(1.9)
+      left = Cm(3.0) if en_nivel_profundo else Cm(1.9)
       p.paragraph_format.left_indent = left
       p.paragraph_format.first_line_indent = Cm(0)
-
       run = p.add_run(texto_limpio)
       run.bold = False
       run.font.name = "Arial"
       run.font.size = Pt(11)
 
     else:
-      # Línea sin fecha y fuera de bloque de fecha: círculo del template
-      if subtitulo_actual:
+      # Línea sin fecha y fuera de bloque de fecha
+      if en_nivel_profundo:
         agregar_viñeta(doc, texto_limpio, nivel=3, espacio_despues=6)
       else:
         agregar_viñeta(doc, texto_limpio, nivel=2, espacio_despues=6)
@@ -1205,7 +1226,11 @@ def cmz_render_planta(doc, texto_compania, excel_madre=None):
       print(f"[WARNING] CMZ - Planta: no se encontró '{titulo}' en formato esperado.")
       errores.append(f"CMZ - Planta: falta '{titulo}'")
 
-  if acumulados:
+  if excel_madre:
+    lineas_acum = extraer_acumulados_cmz(excel_madre)
+    for linea_acum in lineas_acum:
+      agregar_linea_acumulado(doc, linea_acum)
+  elif acumulados:
     doc.add_paragraph("")
     for i, linea in enumerate(acumulados):
       agregar_texto(doc, linea)

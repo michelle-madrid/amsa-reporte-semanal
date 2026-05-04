@@ -168,11 +168,7 @@ def _construir_doc(
             _actualizadas.append(_clave)
         else:
             _pendientes.append(_clave)
-    _sso_en_cache = es_parcial and any(
-        os.path.exists(os.path.join(_TEMP, n)) and os.path.getsize(os.path.join(_TEMP, n)) > 0
-        for n in ("valor_semanal.png", "valor_mensual.png", "valor_anual.png")
-    )
-    if incluir_sso or _sso_en_cache:
+    if incluir_sso:
         _actualizadas.append("SSO")
     else:
         _pendientes.append("SSO")
@@ -235,12 +231,12 @@ def _construir_doc(
         img_hidrica = exportar_imagen_excel(excel_madre, "Gestión Hídrica", "A3:W20", "gestion_hidrica.png")
         agregar_imagen(doc, img_hidrica, 19, 3.24, "")
     elif es_parcial:
-        # Modo Word existente sin GH seleccionada: restaurar imagen del Word previo
         img_cache = os.path.join(_TEMP, "gestion_hidrica.png")
         if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
             agregar_imagen(doc, img_cache, 19, 3.24, "")
         else:
             agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
+            print("  → Gestión Hídrica: En espera de envío información")
     else:
         agregar_texto(doc, _MSG_PENDIENTE, color=(128, 128, 128))
         print("  → Gestión Hídrica: En espera de envío información")

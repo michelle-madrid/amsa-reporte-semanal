@@ -332,9 +332,8 @@ def limpiar_texto_global(texto):
   elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
     texto = texto + "."
 
-  # NBSP antes del signo negativo (evita corte antes de '-') +
-  # WORD JOINER U+2060 entre '-' y el digito (evita que Word lo trate como guion).
-  texto = re.sub(r' (-\d)', lambda m: ' ' + m.group(1)[0] + ' ' + m.group(1)[1:], texto)
+  # NBSP antes del '-' (evita corte de línea); elimina espacio visible entre '-' y dígito.
+  texto = re.sub(r'([ (])-\s*(\d)', lambda m: (' ' if m.group(1)==' ' else m.group(1)) + '‑' + m.group(2), texto)
 
   return texto
 

@@ -516,8 +516,8 @@ def _ordenar_hoja_sso(wb):
             data_range = ws.Range(_cr(ws, primera_fila_datos, min_c), _cr(ws, last_row, last_c))
             if col_id and col_fecha:
                 data_range.Sort(
-                    Key1=_cr(ws, primera_fila_datos, col_id),    Order1=1,
-                    Key2=_cr(ws, primera_fila_datos, col_fecha),  Order2=1,
+                    Key1=_cr(ws, primera_fila_datos, col_fecha),  Order1=1,
+                    Key2=_cr(ws, primera_fila_datos, col_id),     Order2=1,
                     Header=2, Orientation=1,
                 )
             elif col_id:
@@ -732,4 +732,19 @@ def extraer_acumulados_oxe_cen(ruta_excel):
         return lineas
     except Exception as e:
         state.errores.append(f"[ERROR] No se pudo leer acumulados OXE CEN (B139:B140): {e}")
+        return []
+
+# Lee los textos "Acumulado" de CMZ desde el Excel madre (B62 y B63 de la hoja CMZ, como líneas separadas).
+def extraer_acumulados_cmz(ruta_excel):
+    try:
+        wb = openpyxl.load_workbook(ruta_excel, data_only=True)
+        sheet = wb["CMZ"]
+        lineas = []
+        for row in (62, 63):
+            val = sheet[f"B{row}"].value
+            if val:
+                lineas.append(str(val).strip())
+        return lineas
+    except Exception as e:
+        state.errores.append(f"[ERROR] No se pudo leer acumulados CMZ (B62:B63): {e}")
         return []
