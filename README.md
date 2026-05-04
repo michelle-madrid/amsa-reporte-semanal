@@ -33,6 +33,8 @@ El sistema detecta automáticamente todos los archivos dentro de la carpeta de l
 
 > Si existe un Excel `_act` (generado al actualizar vínculos), se usa ese en lugar del original.
 
+> **Semanas especiales**: cuando la semana seleccionada tiene una duración distinta a 7 días —ya sea menor o mayor, calculado desde las fechas de inicio y fin del calendario— el panel muestra un aviso rojo recordando revisar las referencias Excel de CMZ, ya que suelen cambiar el nombre de la pestaña y la configuración de columnas/filas.
+
 ### 4. Generar el informe
 
 En la pestaña **Generar** hay dos modos:
@@ -92,7 +94,7 @@ El Word se construye en este orden:
    - Valor Mensual (`A15:M27`)
    - Valor Semanal (`A29:M41`)
 7. **Sección por faena** (en orden: MLP, CEN, ANT, CMZ, FCAB) — ver detalle más abajo
-8. **Accidentabilidad Back-up** — tablas de la hoja `SSO` del Excel madre, una por página; se filtran las filas con ID de incidente = 0
+8. **Accidentabilidad Back-up** — tablas de la hoja `SSO` del Excel madre, una por página; se filtran las filas con ID de incidente = 0; los registros se ordenan por fecha primero y luego por ID de incidente
 
 Al final se escribe el pie de página con el rango de fechas de la semana.
 
@@ -120,6 +122,7 @@ Cada faena ocupa su propia página y contiene:
 - Tabla de producción semanal
 - Hechos Relevantes
 - **Principales Desviaciones**: Mina · Planta
+- Líneas de acumulado leídas directamente desde el Excel madre (celdas B62 y B63 de la hoja `CMZ`), no desde el Word de faena
 
 #### FCAB
 - Tabla de producción semanal
@@ -168,9 +171,12 @@ Antes de generar se puede actualizar el Excel madre con los datos de cada faena.
 
 Compara los valores numéricos del Word contra el Excel madre celda a celda (rangos configurados en `config.py` por compañía). Lógica de comparación:
 
-- **KPIs normales**: compara el valor absoluto del Word con el del Excel, con tolerancia proporcional a la precisión decimal del texto (±0.6 para enteros, ±0.06 para 1 decimal, etc.)
-- **Líneas "Acumulado al..."**: compara los números en orden de aparición (posición relativa), usando valor absoluto en ambos lados, ya que el signo puede estar expresado por palabras como "mayor/menor producción"
-- **Caracteres NBSP**: `limpiar_texto_global` inserta NBSP (U+00A0) entre signo y dígito para prevenir saltos de línea en Word (ej. `-3.6` → ` - 3.6`). El validador los elimina con `re.sub(r' ', '', linea)` antes de extraer números, para que los negativos se detecten correctamente
+- **KPIs normales**: compara el valor absoluto del Word con el del Excel, con tolerancia proporcional a la precisión decimal del texto (±0.6 para enteros, ±0.06 para 1 decimal, etc.). Solo se comparan los dos primeros valores de cada línea (UNID + %) para evitar falsos positivos con números extra en el texto (fases, fechas, etc.)
+- **Líneas "Acumulado al..."**: solo se compara el porcentaje (último valor); la unidad física se descarta porque puede estar expresada como "mayor/menor producción". Los números se comparan en orden de aparición por posición relativa
+- **Acumulados CMZ**: se leen desde celdas fijas (B62/B63 de la hoja `CMZ`) en lugar de escanear el UsedRange completo
+- **Celdas con solo guiones** (`---`): se interpretan como 100% en el Excel para evitar falsos errores en KPIs sin variación
+- **Guión no-separable** (U+2011): `_numeros_de_linea` lo normaliza a guión estándar antes de parsear, ya que `limpiar_texto_global` lo usa para evitar saltos de línea
+- **Caracteres NBSP**: `limpiar_texto_global` inserta NBSP (U+00A0) antes del guión no-separable para prevenir saltos de línea en Word (ej. `-3.6` → ` ‑3.6`). El validador los elimina antes de extraer números
 
 ### Revisión gramatical
 
@@ -192,7 +198,7 @@ Analiza el Word párrafo a párrafo combinando dos motores:
 | `core/extractores.py` | Extracción de bloques de texto desde Word por sección |
 | `core/renderers.py` | Renderizadores Word por faena y por sección |
 | `core/validador.py` | Validación KPIs Word vs Excel (lógica de comparación y reporte) |
-| `utils/excel_utils.py` | COM Excel, exportación de imágenes, actualización de vínculos |
+| `utils/excel_utils.py` | COM Excel, exportación de imágenes, actualización de vínculos, lectura de acumulados por compañía |
 | `utils/word_utils.py` | Escritura y formato de párrafos, viñetas, imágenes en Word |
 | `utils/text_utils.py` | Normalización y limpieza de texto, inserción de NBSP, detección de fechas |
 
@@ -226,11 +232,11 @@ El documento se construye empezando desde un template `.docx` (`Template Viñeta
 **Tab stop XML para alineación de viñetas**
 Las viñetas manuales con símbolo de círculo necesitan alinear el texto siempre al mismo punto horizontal. Usar espacios o NBSP fallaba al justificar el párrafo porque Word los estira. La solución es inyectar un `<w:tab w:val="left">` en el XML del párrafo y usar `\t` como separador, garantizando alineación exacta independiente del carácter previo.
 
-**NBSP para prevenir saltos de línea**
-`limpiar_texto_global` reemplaza los espacios alrededor de signos y porcentajes por NBSP (U+00A0) para que Word no corte `−3.6 %` o `−7 kt` en medio de un valor. El validador de KPIs debe deshacer esta transformación (`re.sub(r' ', '', linea)`) antes de aplicar regex numéricos, de lo contrario el signo y el dígito quedan separados y el número se detecta como positivo.
+**NBSP y guión no-separable para prevenir saltos de línea**
+`limpiar_texto_global` inserta NBSP (U+00A0) antes del guión no-separable (U+2011, `‑`) para que Word no corte `‑3.6 %` o `‑7 kt` en medio de un valor. Se usa guión no-separable en lugar de guión estándar para que Word no lo interprete como guión de fin de línea. El validador de KPIs elimina los NBSP y normaliza el guión no-separable a guión estándar antes de aplicar regex numéricos.
 
 **Comparación de KPIs acumulados por posición**
-Para las líneas "Acumulado al mes / año", el Excel puede almacenar `-7` mientras el Word escribe `7.0` (con el signo implícito en "menor producción"). La comparación por conjunto de valores fallaba siempre. La solución es comparar por posición relativa en valor absoluto: el i-ésimo número del Word contra el i-ésimo del Excel, sin importar el signo.
+Para las líneas "Acumulado al mes / año", el Excel puede almacenar `-7` mientras el Word escribe `7.0` (con el signo implícito en "menor producción"). La comparación por conjunto de valores fallaba siempre. La solución es comparar solo el porcentaje (último valor numérico), en valor absoluto, descartando la unidad física. Para CMZ, los acumulados se leen desde celdas fijas (B62/B63 de la hoja `CMZ`) porque su formato no es compatible con el escaneo dinámico genérico.
 
 **Panel web como thin wrapper**
 `server.py` redirige `stdout` a un buffer compartido (`_Tee`) que los endpoints `/api/logs` exponen como stream de texto. Toda la lógica vive en los módulos `main.py`, `core/` y `utils/`; el servidor solo orquesta llamadas e importaciones. Esto permite ejecutar cualquier módulo standalone desde la terminal sin depender del servidor.

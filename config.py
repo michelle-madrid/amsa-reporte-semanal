@@ -180,6 +180,7 @@ CONFIG_CELDAS_DESVIACIONES = {
         # ── Cátodos — Planta Hidro MET ────────────────────────────────────────
         "Producción de Cátodos de Cu MET":          ("D125", "F125", "G125"),
         "Mineral Apilado MET":                      ("D126", "F126", "G126"),
+        "Mineral Apilado":                          ("D126", "F126"),
         "Mineral Beneficiado MET":                  ("D127", "F127", "G127"),
         "Ley de Cu MET":                            ("F128", "F128", "G128"),
         "Producción de ROM":                        ("D130", "F130", "G130"),

@@ -1242,9 +1242,11 @@ function aplicarCalendario(numSemana) {
 
     const avisoEl = document.getElementById('semanaAviso');
     if (avisoEl) {
-      let numDias = 7;
-      const mDias = (datos.detalles || '').match(/[Ii]nforme\s+(\d+)\s+d[íi]/);
-      if (mDias) numDias = parseInt(mDias[1]);
+      const yr = parseInt(document.getElementById('year').value) || new Date().getFullYear();
+      const dIni = new Date(yr, datos.mes_inicio - 1, datos.dia_inicio);
+      const dFin = new Date(yr, datos.mes_fin   - 1, datos.dia_fin);
+      if (dFin < dIni) dFin.setFullYear(yr + 1);
+      const numDias = Math.round((dFin - dIni) / 86400000) + 1;
       avisoEl.style.display = numDias !== 7 ? '' : 'none';
     }
 
@@ -1683,8 +1685,9 @@ async function lanzarGenerar() {
         kpiWrap.style.display = '';
         kpiWrap.querySelector('#genResSummary').innerHTML  = '<span style="font-size:12px;color:var(--gray-l);">● Validando KPIs…</span>';
         kpiWrap.querySelector('#genResSections').innerHTML = '';
+        kpiWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         setTimeout(async () => {
-          await _lanzarTarea('/api/validar', { ruta_word: resultPath, ruta_excel, faenas: getFaenas() }, null, mostrarResultadosEnGenerar);
+          await _lanzarTarea('/api/validar', { ruta_word: resultPath, ruta_excel, faenas: getFaenas() }, null, mostrarResultadosEnGenerar, { skipClearLogs: true });
         }, 300);
       }
     }
@@ -1748,8 +1751,8 @@ async function lanzarOrtografia() {
   });
 }
 
-async function _lanzarTarea(url, payload, btnId, onDone) {
-  clearLogs();
+async function _lanzarTarea(url, payload, btnId, onDone, opts = {}) {
+  if (!opts.skipClearLogs) clearLogs();
   setRunning(true);
   const btnEl = btnId ? document.getElementById(btnId) : null;
   if (btnEl) btnEl.disabled = true;
