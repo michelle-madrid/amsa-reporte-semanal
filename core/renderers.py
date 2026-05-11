@@ -965,7 +965,7 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   while i < len(contenido):
     texto = contenido[i]
 
-    if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?\sde\s\w+\sde\s\d{4}:", texto):
+    if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?(?:\sde)?\s\w+\sde\s\d{4}:", texto):
       if i + 1 < len(contenido) and contenido[i + 1].strip().startswith("Restricción:"):
         texto = texto.strip() + " " + contenido[i + 1].strip()
         i += 1
@@ -1027,9 +1027,9 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
 
   if excel_madre:
     img_hidrica_mlp = exportar_imagen_excel(
-      excel_madre, "Gestión Hídrica", "A3:W20", "tabla_hidrica_mlp.png"
+      excel_madre, "Gestión Hídrica", "A3:W12", "tabla_hidrica_mlp.png"
     )
-    agregar_imagen(doc, img_hidrica_mlp, 19, 3.24, "")
+    agregar_imagen(doc, img_hidrica_mlp, 19, None, "")
 
     p_img = doc.add_paragraph(style="Normal AMSA")
     p_img.paragraph_format.space_before = Pt(0)
@@ -1038,7 +1038,7 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
     # MLP no seleccionada: usar imagen cacheada del Word previo si existe
     img_cache = os.path.join(r"C:\Temp", "tabla_hidrica_mlp.png")
     if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
-      agregar_imagen(doc, img_cache, 19, 3.24, "")
+      agregar_imagen(doc, img_cache, 19, None, "")
       p_img = doc.add_paragraph(style="Normal AMSA")
       p_img.paragraph_format.space_before = Pt(0)
       p_img.paragraph_format.space_after = Pt(12)
