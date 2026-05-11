@@ -301,7 +301,17 @@ CONFIG_HOJAS_ADICIONALES = {
 # Comparación normalizada (sin tildes, minúsculas).
 CONFIG_KPI_PREFIJOS_EXCLUIDOS = {
     "FCAB": {"minera"},
+    "ANT":  {"se proyecta", "nota"},
 }
+
+# KPIs requeridos por compañía: si no aparecen en la validación, se registra error.
+CONFIG_KPI_REQUERIDOS = {
+    "ANT": ["Movimiento Mina"],
+}
+
+# KPIs para los que solo se valida la desviación % (primer valor numérico del Word).
+# Aplica a cualquier compañía. Normalizado sin tildes/minúsculas al usar.
+CONFIG_KPI_SOLO_DESVIACION = {"Recuperación Cu", "Recuperacion Cu"}
 
 # KPIs que deben ignorarse en la validación por compañía (el label es exactamente
 # como aparece en el Word, comparación normalizada — sin tildes, minúsculas).

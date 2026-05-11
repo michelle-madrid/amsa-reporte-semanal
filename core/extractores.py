@@ -104,14 +104,28 @@ def extraer_principales_desviaciones(texto):
 def extraer_mina(texto):
     seccion = []
     capturar = False
+    en_principales = False
+    PARADAS_EXACTAS = {"Planta", "Planta:"}
+    PARADAS_PREFIJO = ("Concentradora", "Sulfuros", "Detalle por fases")
     for linea in texto.split("\n"):
-        if linea.startswith("Mina"):
-            capturar = True
+        l = linea.strip()
+        if l.startswith("Principales Desviaciones"):
+            en_principales = True
             continue
+        if not capturar:
+            if linea.startswith("Mina"):
+                # Solo disparar si es encabezado corto, no contenido ("Mina: texto largo...")
+                resto = l[4:].lstrip(":").strip()
+                if len(resto) < 10:
+                    capturar = True
+                    continue
+            # Sin encabezado: fallback en "Movimiento Mina" solo dentro de PD
+            if en_principales and l.startswith("Movimiento Mina"):
+                capturar = True
         if capturar:
-            if linea.startswith("Concentradora") or linea.startswith("Sulfuros") or linea.startswith("Detalle por fases") or linea.startswith("Planta"):
+            if l in PARADAS_EXACTAS or any(l.startswith(p) for p in PARADAS_PREFIJO):
                 break
-            seccion.append(linea.strip())
+            seccion.append(l)
     return seccion
 
 # Extrae información específica desde el texto o archivo de origen.
@@ -172,13 +186,19 @@ def extraer_detalle_fases(texto):
 def extraer_planta(texto):
     seccion = []
     capturar = False
+    en_principales = False
     for linea in texto.split("\n"):
-        linea_limpia = linea.strip()
-        if linea_limpia.startswith("Planta:") or linea_limpia.startswith("Planta"):
+        l = linea.strip()
+        if l.startswith("Principales Desviaciones"):
+            en_principales = True
+            continue
+        if not en_principales:
+            continue
+        if l.startswith("Planta:") or (l.startswith("Planta") and not l.startswith("Planta Desaladora") and not l.startswith("Planta Hidro")):
             capturar = True
             continue
         if capturar:
-            seccion.append(linea_limpia)
+            seccion.append(l)
     return seccion
 
 # Extrae información específica desde el texto o archivo de origen.

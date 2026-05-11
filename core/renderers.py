@@ -1150,6 +1150,7 @@ def procesar_ant(doc, texto_compania, excel_madre):
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
 
   ant_render_mina(doc, texto_compania, excel_madre)
+  procesar_seccion(doc, texto_compania, "ANT", "Detalle por fases", ["Extracción de Mineral", "Extracción de Lastre"], excel_madre)
   procesar_seccion(doc, texto_compania, "ANT", "Planta", [""], excel_madre)
 
 # Procesa la sección o faena indicada usando las reglas correspondientes.

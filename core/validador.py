@@ -4,7 +4,7 @@ import re
 import time
 
 import state
-from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO
+from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS
 
 # ── Resultado estructurado (para panel HTML) ──────────────────────────────────
 _resultados: list = []
@@ -74,7 +74,7 @@ def _tol_para(raw_str):
     # Coma como separador de miles: N,NNN  o  N,NNN,NNN → tolerancia de entero
     if re.match(r'^\d{1,3}(,\d{3})+$', s):
         return 0.6
-    m = re.search(r'[.,](\d+)', raw_str)
+    m = re.search(r'\.(\d+)', raw_str)
     if m:
         return 0.6 / (10 ** len(m.group(1)))
     return 0.6
@@ -735,6 +735,10 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         # números extra del texto (fases, fechas, etc.) que no corresponden.
         if len(numeros) > 2:
             numeros = numeros[:2]
+        # KPIs que solo tienen desviación %: descartar el valor absoluto.
+        _label_pre = _norm(_extraer_label(linea) or "")
+        if any(_norm(k) in _label_pre for k in CONFIG_KPI_SOLO_DESVIACION):
+            numeros = numeros[:1]
         lineas_revisadas += 1
         linea_corta = linea if len(linea) <= 78 else linea[:75] + "..."
         print(f"\n    {linea_corta}")
@@ -839,6 +843,17 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
             kpi["estado"] = "sin_label"
 
         _kpis.append(kpi)
+
+    # Verificar KPIs requeridos
+    requeridos = CONFIG_KPI_REQUERIDOS.get(clave, [])
+    labels_encontrados = {_norm(k["label"]) for k in _kpis if k["label"]}
+    for req in requeridos:
+        if not any(_norm(req) in lbl for lbl in labels_encontrados):
+            msg = f"FALTA KPI REQUERIDO: '{req}' no encontrado en la sección."
+            print(f"  ✗ {msg}")
+            n_warn += 1
+            _kpis.append({"linea": msg, "label": req, "excel_label": None,
+                          "estado": "revisar", "valores": []})
 
     print()
     if lineas_revisadas == 0:
