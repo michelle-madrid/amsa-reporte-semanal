@@ -13,6 +13,17 @@ def get_resultados():
     """Devuelve los resultados de la última validación como lista serializable."""
     return list(_resultados)
 
+def reset_resultados():
+    global _resultados
+    _resultados = []
+
+def register_error(msg: str):
+    _resultados.append({
+        "clave": "__ERROR__", "nombre": "Error de validación",
+        "kpis": [], "n_ok": 0, "n_warn": 0, "n_sin_celda": 0,
+        "estado": "error", "error": msg,
+    })
+
 # ── Helpers numéricos ─────────────────────────────────────────────────────────
 
 def _a_float(s):
@@ -263,11 +274,23 @@ def _leer_celdas_exactas(wb_com, nombre_hoja, celdas_config):
         celda_status_cfg = cells[2] if len(cells) > 2 else None
 
         nums = set()
-        for celda_a1 in filter(None, (celda_dif, celda_pct)):
+        # Celda de diferencia en unidades: normalización estándar
+        if celda_dif:
             try:
-                v = _com_call(lambda c=celda_a1: ws.Range(c).Value)
+                v = _com_call(lambda c=celda_dif: ws.Range(c).Value)
                 for n in _normalizar_excel(v):
                     nums.add(n)
+            except Exception:
+                pass
+        # Celda de porcentaje: siempre añadir también v×100 para cubrir fracciones
+        # grandes (ej. F54=17.983 almacenado → 1798.3% mostrado en Excel)
+        if celda_pct:
+            try:
+                v = _com_call(lambda c=celda_pct: ws.Range(c).Value)
+                for n in _normalizar_excel(v):
+                    nums.add(n)
+                if isinstance(v, (int, float)) and not isinstance(v, bool) and v != 0:
+                    nums.add(round(float(v) * 100, 4))
             except Exception:
                 pass
 

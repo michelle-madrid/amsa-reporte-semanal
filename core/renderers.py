@@ -384,8 +384,8 @@ def mlp_render_accidentabilidad(doc, lineas):
 # Renderiza accidentabilidad para todas las compañías excepto MLP.
 # Las líneas de fecha (nivel 3) absorben líneas de continuación que empiezan con "-".
 def render_accidentabilidad_generica(doc, lineas):
-  # Acepta "06 de abril de 2026" y "06 de abril 2026" (con o sin "de" antes del año)
-  patron_fecha = re.compile(r"^\d{1,2}\s+de\s+\w+(\s+de)?\s+\d{4}")
+  # Acepta "06 de abril de 2026", "06 de abril 2026" y "9-5-26" / "9-5-2026"
+  patron_fecha = re.compile(r"^\d{1,2}\s+de\s+\w+(?:\s+de)?\s+\d{4}|^\d{1,2}-\d{1,2}-\d{2,4}")
   pendiente = None  # {'fecha': str, 'texto': str}
 
   def _flush():
@@ -726,6 +726,12 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
         return
 
     if not orden_subtitulos or orden_subtitulos == [""]:
+        _pat_fecha_pd = re.compile(
+            r"^\d{1,2}\s+de\s+\w+(?:\s+de)?\s+\d{4}"
+            r"|^\d{1,2}-\d{1,2}-\d{2,4}"
+            r"|^(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s",
+            re.IGNORECASE,
+        )
         for linea in contenido:
             texto_limpio = linea.strip()
             texto_base = re.sub(r"^[•○o·\-\s\u200b\ufeff]+", "", texto_limpio).strip()
@@ -741,7 +747,13 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
             ):
                 agregar_linea_acumulado(doc, texto_base)
             else:
-                if nombre_compania == "ANT" and nombre_seccion == "Planta":
+                es_sub_item = (
+                    bool(re.match(r"^[o○]\s", texto_limpio))
+                    or bool(_pat_fecha_pd.match(texto_base))
+                )
+                if es_sub_item:
+                    agregar_viñeta_plana(doc, texto_base, nivel=nivel_base + 1, espacio_despues=6)
+                elif nombre_compania == "ANT" and nombre_seccion == "Planta":
                     agregar_viñeta_inicio_negrita(doc, linea, nivel=nivel_base, espacio_despues=6)
                 else:
                     agregar_viñeta(doc, linea, nivel=nivel_base, espacio_despues=6)

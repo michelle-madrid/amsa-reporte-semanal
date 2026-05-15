@@ -373,6 +373,7 @@ def api_word_secciones():
 def api_generar():
     global _running
     if _running: return jsonify({"error": "Ya hay una tarea en ejecución."}), 409
+    _running = True
     t = threading.Thread(target=_task, args=(_generar, request.json), daemon=True)
     t.start()
     return jsonify({"ok": True})
@@ -382,6 +383,7 @@ def api_generar():
 def api_validar():
     global _running
     if _running: return jsonify({"error": "Ya hay una tarea en ejecución."}), 409
+    _running = True
     t = threading.Thread(target=_task, args=(_validar, request.json), daemon=True)
     t.start()
     return jsonify({"ok": True})
@@ -397,6 +399,7 @@ def api_validar_resultado():
 def api_revisar_ortografia():
     global _running
     if _running: return jsonify({"error": "Ya hay una tarea en ejecución."}), 409
+    _running = True
     t = threading.Thread(target=_task, args=(_revisar_ortografia, request.json), daemon=True)
     t.start()
     return jsonify({"ok": True})
@@ -406,7 +409,7 @@ def _task(fn, data):
     global _running
     import pythoncom
     pythoncom.CoInitialize()
-    _running = True; _start_cap()
+    _start_cap()
     try:    fn(data)
     except: print(f"\n[ERROR]\n{traceback.format_exc()}")
     finally: _stop_cap(); _running = False; pythoncom.CoUninitialize()
@@ -598,57 +601,68 @@ def _validar(d):
     ruta_excel = d.get("ruta_excel", "").strip()
     faenas     = d.get("faenas") or None   # None → valida todo
 
+    from core.validador import validar_kpis_vs_excel, reset_resultados, register_error
+    reset_resultados()
+
     if not Path(ruta_word).is_file():
-        print(f"[ERROR] Word no encontrado: {ruta_word}"); return
+        msg = f"Word no encontrado: {ruta_word}"
+        print(f"[ERROR] {msg}"); register_error(msg); return
     if not Path(ruta_excel).is_file():
-        print(f"[ERROR] Excel no encontrado: {ruta_excel}"); return
+        msg = f"Excel no encontrado: {ruta_excel}"
+        print(f"[ERROR] {msg}"); register_error(msg); return
 
-    from docx import Document
-    from config import CONFIG_COMPANIAS
-    from core.validador import validar_kpis_vs_excel
-    from utils.excel_utils import _obtener_excel_app
-    from state import _workbooks_abiertos
+    try:
+        from docx import Document
+        from config import CONFIG_COMPANIAS
+        from utils.excel_utils import _obtener_excel_app
+        from state import _workbooks_abiertos
 
-    print(f"\n── Validación KPIs ────────────────────────────────────────")
-    print(f"  Word : {Path(ruta_word).name}")
-    print(f"  Excel: {Path(ruta_excel).name}")
-    if faenas:
-        print(f"  Secciones: {', '.join(faenas)}")
-    print()
+        print(f"\n── Validación KPIs ────────────────────────────────────────")
+        print(f"  Word : {Path(ruta_word).name}")
+        print(f"  Excel: {Path(ruta_excel).name}")
+        if faenas:
+            print(f"  Secciones: {', '.join(faenas)}")
+        print()
 
-    _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
-    doc = Document(ruta_word)
-    informes, clave_actual, buf = {}, None, []
+        _N2K = {cfg["nombre"]: k for k, cfg in CONFIG_COMPANIAS.items()}
+        doc = Document(ruta_word)
+        informes, clave_actual, buf = {}, None, []
 
-    def _save():
-        if clave_actual and buf:
-            informes[clave_actual] = "\n".join(buf)
+        def _save():
+            if clave_actual and buf:
+                informes[clave_actual] = "\n".join(buf)
 
-    for p in doc.paragraphs:
-        t = p.text.strip()
-        if not t: continue
-        if t in _N2K:
-            _save(); clave_actual = _N2K[t]; buf = []
-        elif clave_actual:
-            buf.append(t)
-    _save()
+        for p in doc.paragraphs:
+            t = p.text.strip()
+            if not t: continue
+            if t in _N2K:
+                _save(); clave_actual = _N2K[t]; buf = []
+            elif clave_actual:
+                buf.append(t)
+        _save()
 
-    # Filtrar solo las faenas solicitadas
-    if faenas:
-        informes = {k: v for k, v in informes.items() if k in faenas}
+        # Filtrar solo las faenas solicitadas
+        if faenas:
+            informes = {k: v for k, v in informes.items() if k in faenas}
 
-    if not informes:
-        print("  ! No se detectaron secciones de compañía en el Word."); return
-    print(f"  Compañías a validar: {', '.join(informes)}")
+        if not informes:
+            msg = "No se detectaron secciones de compañía en el Word."
+            print(f"  ! {msg}"); register_error(msg); return
+        print(f"  Compañías a validar: {', '.join(informes)}")
 
-    ruta_abs = str(Path(ruta_excel).resolve())
-    wb = _workbooks_abiertos.get(ruta_abs)
-    if wb is None:
-        print("  Abriendo Excel...")
-        wb = _obtener_excel_app().Workbooks.Open(ruta_abs, UpdateLinks=0)
-        _workbooks_abiertos[ruta_abs] = wb
+        ruta_abs = str(Path(ruta_excel).resolve())
+        wb = _workbooks_abiertos.get(ruta_abs)
+        if wb is None:
+            print("  Abriendo Excel...")
+            wb = _obtener_excel_app().Workbooks.Open(ruta_abs, UpdateLinks=0)
+            _workbooks_abiertos[ruta_abs] = wb
 
-    validar_kpis_vs_excel(informes, wb)
+        validar_kpis_vs_excel(informes, wb)
+
+    except Exception:
+        err = traceback.format_exc()
+        register_error(err)
+        print(f"\n[ERROR validación]\n{err}")
 
 # ── Implementación: Revisar ortografía y gramática ───────────────────────────
 def _revisar_ortografia(d):
