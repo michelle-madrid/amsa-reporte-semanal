@@ -332,7 +332,7 @@ def agregar_viñeta(doc, texto, nivel=1, bold=False, color=None, underline=False
         return
 
     match_cabecera = re.search(r"^([^:]{2,40}):(\s|$)", texto)
-    if match_cabecera:
+    if match_cabecera and not re.search(r"\(\w+\)", match_cabecera.group(1)):
         cabecera = match_cabecera.group(1) + ": "
         resto = texto[match_cabecera.end():]
         run_c = p.add_run(cabecera)

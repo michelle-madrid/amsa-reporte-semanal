@@ -734,6 +734,21 @@ def extraer_acumulados_oxe_cen(ruta_excel):
         state.errores.append(f"[ERROR] No se pudo leer acumulados OXE CEN (B139:B140): {e}")
         return []
 
+# Lee las líneas "Acumulado" de Concentradora MLP desde el Excel madre (C58:C59).
+def extraer_acumulados_mlp(ruta_excel):
+    try:
+        wb = openpyxl.load_workbook(ruta_excel, data_only=True)
+        sheet = wb["MLP"]
+        lineas = []
+        for row in (58, 59):
+            val = sheet[f"C{row}"].value
+            if val:
+                lineas.append(str(val).strip())
+        return lineas
+    except Exception as e:
+        state.errores.append(f"[ERROR] No se pudo leer acumulados MLP (C58:C59): {e}")
+        return []
+
 # Lee los textos "Acumulado" de CMZ desde el Excel madre (B62 y B63 de la hoja CMZ, como líneas separadas).
 def extraer_acumulados_cmz(ruta_excel):
     try:

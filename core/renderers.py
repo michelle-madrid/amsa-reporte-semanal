@@ -9,7 +9,7 @@ from state import errores
 from utils.text_utils import *
 from utils.text_utils import _quitar_dos_puntos_inicio
 from utils.word_utils import *
-from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen, extraer_acumulados_cmz
+from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen, extraer_acumulados_cmz, extraer_acumulados_mlp
 from core.extractores import *
 
 
@@ -34,9 +34,10 @@ def construir_bloque_faena(doc, clave, texto_word, excel_madre, orden_secciones=
 def mlp_render_medio_ambiente(doc, lineas):
   subtitulo_actual = None
   dentro_de_fecha = False
+  nivel_en_fecha = False    # en_nivel_profundo al momento de abrir el bloque de fecha
   eventos_anunciados = 0   # cantidad declarada en "N evento(s) reportado(s)..."
   eventos_renderizados = 0  # fechas ya renderizadas bajo el subtítulo actual
-  patron_fecha = re.compile(r"^\d{1,2}\sde\s\w+\sde\s\d{4}")
+  patron_fecha = re.compile(r"^\d{1,2}\sde\s\w+(?:\sde)?\s\d{4}")
   patron_n_eventos = re.compile(r"^(\d+)\s+evento", re.IGNORECASE)
 
   for linea in lineas:
@@ -63,6 +64,17 @@ def mlp_render_medio_ambiente(doc, lineas):
       eventos_renderizados = 0
       continue
 
+    # "N evento(s)..." — detectar ANTES de es_subtitulo porque puede no tener ":"
+    # Ej: "1 Evento Reportado a la SMA" (sin ":" al final)
+    m_n = patron_n_eventos.match(texto_limpio)
+    if m_n:
+      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=2, espacio_despues=6)
+      subtitulo_actual = texto_limpio
+      eventos_anunciados = int(m_n.group(1))
+      eventos_renderizados = 0
+      dentro_de_fecha = False
+      continue
+
     es_subtitulo = (
       ":" not in texto_limpio
       and not texto_limpio.endswith(".")
@@ -77,39 +89,31 @@ def mlp_render_medio_ambiente(doc, lineas):
       eventos_renderizados = 0
       continue
 
-    # Encabezado corto que termina en ":" → viñeta sin negrita (e.g. "N eventos reportados a la SMA:")
+    # Encabezado corto que termina en ":" → viñeta sin negrita
     if texto_limpio.endswith(":") and len(texto_limpio) <= 60:
-      # "N evento(s)..." siempre va al nivel 2; otros encabezados anidados van al 3
-      m_n = patron_n_eventos.match(texto_limpio)
-      if m_n:
-        agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=2, espacio_despues=6)
-        subtitulo_actual = texto_limpio
-        eventos_anunciados = int(m_n.group(1))
-        eventos_renderizados = 0
-      else:
-        nivel = 3 if subtitulo_actual else 2
-        agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=nivel, espacio_despues=6)
-        subtitulo_actual = texto_limpio
-        eventos_anunciados = 0
-        eventos_renderizados = 0
+      nivel = 3 if subtitulo_actual else 2
+      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=nivel, espacio_despues=6)
+      subtitulo_actual = texto_limpio
+      eventos_anunciados = 0
+      eventos_renderizados = 0
       dentro_de_fecha = False
       continue
-
-    if texto_limpio.startswith("Calidad del aire"):
-      dentro_de_fecha = False
-      nivel_calidad = 3 if subtitulo_actual else 2
-      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=nivel_calidad, espacio_despues=6)
-      continue
-
-    match_fecha = patron_fecha.match(texto_limpio)
 
     # Determinar si aún quedan eventos anunciados por renderizar
     en_nivel_profundo = subtitulo_actual and (
       eventos_anunciados == 0 or eventos_renderizados < eventos_anunciados
     )
 
+    if texto_limpio.startswith("Calidad del aire"):
+      dentro_de_fecha = False
+      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=3 if en_nivel_profundo else 2, espacio_despues=6)
+      continue
+
+    match_fecha = patron_fecha.match(texto_limpio)
+
     if match_fecha:
       dentro_de_fecha = True
+      nivel_en_fecha = en_nivel_profundo
       nivel_fecha = 3 if en_nivel_profundo else 2
       agregar_viñeta_fecha_inicial(doc, texto_limpio, nivel=nivel_fecha, espacio_despues=6)
       if en_nivel_profundo:
@@ -120,7 +124,7 @@ def mlp_render_medio_ambiente(doc, lineas):
       p.paragraph_format.line_spacing = 1.0
       p.paragraph_format.space_before = Pt(0)
       p.paragraph_format.space_after = Pt(6)
-      left = Cm(3.0) if en_nivel_profundo else Cm(1.9)
+      left = Cm(3.0) if nivel_en_fecha else Cm(1.9)
       p.paragraph_format.left_indent = left
       p.paragraph_format.first_line_indent = Cm(0)
       run = p.add_run(texto_limpio)
@@ -977,7 +981,7 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   while i < len(contenido):
     texto = contenido[i]
 
-    if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?(?:\sde)?\s\w+\sde\s\d{4}:", texto):
+    if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?(?:\sde)?\s\w+(?:\sde\s\d{4})?:", texto):
       if i + 1 < len(contenido) and contenido[i + 1].strip().startswith("Restricción:"):
         texto = texto.strip() + " " + contenido[i + 1].strip()
         i += 1
@@ -1119,6 +1123,37 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
         run_final.font.name = "Arial"
         run_final.font.size = Pt(11)
 
+# Renderiza la Concentradora MLP tomando los acumulados desde Excel (C58:C59) si hay excel_madre.
+def mlp_render_concentradora(doc, texto_compania, excel_madre=None):
+    contenido = [linea.strip() for linea in extraer_concentradora(texto_compania) if linea.strip()]
+    if not contenido:
+        return
+
+    agregar_texto(doc, "Concentradora:", bold=True, color=(0x00, 0x77, 0x8B))
+
+    acumulados_word = []
+    for linea in contenido:
+        texto_base = re.sub(r"^[•○o·\-\s​﻿]+", "", linea.strip()).strip()
+        if texto_base.lower().startswith("ley ") or texto_base.lower().startswith("recuperaci"):
+            linea = limpiar_parentesis_ley(linea)
+            texto_base = limpiar_parentesis_ley(texto_base)
+        if (
+            texto_base.startswith("Acumulado al mes")
+            or texto_base.startswith("Acumulado al año")
+            or texto_base.startswith("Respecto del Plan")
+        ):
+            acumulados_word.append(texto_base)
+        else:
+            agregar_viñeta(doc, linea, nivel=2, espacio_despues=6)
+
+    if excel_madre:
+        lineas_acum = extraer_acumulados_mlp(excel_madre)
+        for linea_acum in lineas_acum:
+            agregar_linea_acumulado(doc, linea_acum)
+    elif acumulados_word:
+        for texto in acumulados_word:
+            agregar_linea_acumulado(doc, texto)
+
 # Procesa la sección o faena indicada usando las reglas correspondientes.
 def procesar_mlp(doc, texto_compania, excel_madre):
     agregar_hechos_relevantes(doc, texto_compania, compania="MLP")
@@ -1137,7 +1172,7 @@ def procesar_mlp(doc, texto_compania, excel_madre):
             mlp_render_gestion_hidrica(doc, texto_compania, excel_madre)
         elif nombre_seccion == "Concentradora":
             doc.add_paragraph("")
-            procesar_seccion(doc, texto_compania, "MLP", nombre_seccion, orden_subtitulos, excel_madre)
+            mlp_render_concentradora(doc, texto_compania, excel_madre)
         else:
             procesar_seccion(doc, texto_compania, "MLP", nombre_seccion, orden_subtitulos, excel_madre)
 

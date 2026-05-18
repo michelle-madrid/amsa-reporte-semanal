@@ -36,26 +36,38 @@ def extraer_accidentabilidad(texto):
 
 # Extrae información específica desde el texto o archivo de origen.
 def extraer_reportabilidad(texto):
-    return extraer_bloque(
-        texto,
-        inicio="Reportabilidad",
-        finales=(
-            "Medio Ambiente",
-            "Gestión SSO",
-            "Salud Ocupacional y Gestión Vial",
-            "Producción Semana",
-        ),
-    )
+    # "Medio Ambiente:" (con ":" inmediato) es sub-ítem de Reportabilidad → no corta.
+    # "Medio Ambiente" sin ":" es encabezado standalone → sí corta.
+    FINALES_PREFIJO = ("Gestión SSO", "Salud Ocupacional y Gestión Vial",
+                       "Producción Semana", "Asuntos Públicos")
+    seccion = []
+    capturar = False
+    for linea in texto.split("\n"):
+        l = linea.strip()
+        if not capturar:
+            if "Reportabilidad" in l:
+                capturar = True
+                continue
+        else:
+            if l.startswith("Medio Ambiente"):
+                break
+            if any(l.startswith(f) for f in FINALES_PREFIJO):
+                break
+            if l:
+                seccion.append(l)
+    return seccion
 
 # Extrae información específica desde el texto o archivo de origen.
 def extraer_medio_ambiente(texto):
+    # Solo activar en encabezado standalone "Medio Ambiente" (sin ":" inmediato).
+    # "Medio Ambiente:" como sub-ítem dentro de Reportabilidad NO dispara esto.
     seccion = []
     capturar = False
     finales = ("Asuntos Públicos", "Gestión SSO", "Producción Semana")
     for linea in texto.split("\n"):
         l = linea.strip()
         if not capturar:
-            if "Medio Ambiente" in l:
+            if l.startswith("Medio Ambiente"):
                 capturar = True
                 continue
         else:
