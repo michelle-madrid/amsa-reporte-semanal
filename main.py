@@ -391,6 +391,7 @@ def _construir_doc(
     texto_pie = construir_texto_semana(dia_inicio, mes_inicio, dia_fin, mes_fin, year)
     agregar_pie_de_pagina(doc, texto_pie)
 
+    eliminar_paginas_blanco(doc)
     ruta_guardado = os.path.join(carpeta_destino, f"{nombre_final}.docx")
     doc.save(ruta_guardado)
     cerrar_excels()

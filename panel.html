@@ -950,6 +950,16 @@
       ⚠ Usando archivos de la <strong>semana anterior</strong> para: <span id="aviso_faenas"></span>
     </div>
 
+    <!-- Aviso Excel madre no encontrado -->
+    <div id="aviso_excel_madre" style="display:none; background:rgba(237,137,54,.08); border:1px solid var(--warn); border-radius:8px; padding:14px 18px; margin-bottom:16px;">
+      <div style="color:var(--warn); font-weight:600; margin-bottom:8px;">⚠ Excel madre con nombre de otra semana encontrado</div>
+      <div style="font-size:12px; color:var(--gray); margin-bottom:12px; line-height:1.6;">
+        Encontrado: <strong id="aviso_excel_origen_nombre"></strong><br>
+        Se esperaba: <strong id="aviso_excel_destino_nombre"></strong>
+      </div>
+      <button class="btn-primary" onclick="renombrarExcelGenerar()">Renombrar y continuar</button>
+    </div>
+
     <!-- Botón generar -->
     <div class="btn-row" style="margin-bottom:20px;">
       <button class="btn btn-primary" id="btnGenerar" onclick="lanzarGenerar()">
@@ -1391,10 +1401,51 @@ async function fetchSemanaInfo() {
         avisoEl.style.display = 'none';
       }
     }
+    _actualizarAvisoExcelMadre(j);
   } catch(e) {
     fillInput('pathRaiz', '', false);
     const st = document.getElementById('pathRaiz_st');
     if (st) { st.textContent = '⚠ Servidor no disponible'; st.className = 'path-status err'; }
+  }
+}
+
+let _excelMadreCandidato = null;
+let _excelMadreDestino   = null;
+
+function _actualizarAvisoExcelMadre(j) {
+  const aviso = document.getElementById('aviso_excel_madre');
+  if (!aviso) return;
+  if (!j.excel_madre_ok && j.excel_madre_candidato) {
+    _excelMadreCandidato = j.excel_madre_candidato;
+    _excelMadreDestino   = j.excel_madre;
+    const origenNombre  = j.excel_madre_candidato.replace(/\\/g,'/').split('/').pop();
+    const destinoNombre = j.excel_madre.replace(/\\/g,'/').split('/').pop();
+    document.getElementById('aviso_excel_origen_nombre').textContent  = origenNombre;
+    document.getElementById('aviso_excel_destino_nombre').textContent = destinoNombre;
+    aviso.style.display = '';
+  } else {
+    _excelMadreCandidato = null;
+    _excelMadreDestino   = null;
+    aviso.style.display  = 'none';
+  }
+}
+
+async function renombrarExcelGenerar() {
+  if (!_excelMadreCandidato || !_excelMadreDestino) return;
+  try {
+    const r = await fetch('/api/renombrar-excel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ origen: _excelMadreCandidato, destino: _excelMadreDestino })
+    });
+    const j = await r.json();
+    if (j.error) { alert('Error al renombrar: ' + j.error); return; }
+    document.getElementById('aviso_excel_madre').style.display = 'none';
+    _excelMadreCandidato = null;
+    fillInput('g_excel_madre', _excelMadreDestino, true);
+    _excelMadreDestino = null;
+  } catch(e) {
+    alert('Error: ' + e.message);
   }
 }
 
@@ -1509,6 +1560,7 @@ async function fetchSemanaInfoConRaiz(raiz) {
         avisoEl2.style.display = 'none';
       }
     }
+    _actualizarAvisoExcelMadre(j);
   } catch(e) { /* servidor no disponible, ignorar */ }
 }
 
@@ -1541,6 +1593,13 @@ async function lanzarGenerar() {
   const data = getSemanaData();
   if (!data) {
     alert('Completa todos los datos de la semana en la pestaña Configuración.');
+    return;
+  }
+
+  // Bloquear si hay error de ruta (Excel madre no encontrado)
+  const avisoExcel = document.getElementById('aviso_excel_madre');
+  if (avisoExcel && avisoExcel.style.display !== 'none') {
+    alert('El Excel madre no existe con el nombre esperado.\nRenómbralo primero usando el botón "Renombrar y continuar".');
     return;
   }
 
@@ -1703,6 +1762,21 @@ async function lanzarValidar() {
   }
   document.getElementById('validarResultados').style.display = 'none';
   await _lanzarTarea('/api/validar', { ruta_word, ruta_excel, faenas: getFaenas() }, 'btnValidar', mostrarResultados);
+}
+
+async function renombrarExcel(origen, destino) {
+  try {
+    const r = await fetch('/api/renombrar-excel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ origen, destino })
+    });
+    const j = await r.json();
+    if (j.error) { alert('Error al renombrar: ' + j.error); return; }
+    lanzarValidar();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
 }
 
 async function lanzarOrtografia() {
@@ -2057,7 +2131,7 @@ function renderResultados(secciones, container) {
     : document.getElementById('genResSections');
 
   // ── Resumen global ────────────────────────────────────────────────
-  const soloErrores = secciones.every(x => x.estado === 'error');
+  const soloErrores = secciones.every(x => x.estado === 'error' || x.estado === 'rename_needed');
   const totOk   = secciones.reduce((s,x) => s + (x.n_ok || 0), 0);
   const totWarn = secciones.reduce((s,x) => s + (x.n_warn || 0), 0);
   const totNone = secciones.reduce((s,x) => s + (x.n_sin_celda || 0), 0);
@@ -2103,6 +2177,25 @@ function renderResultados(secciones, container) {
       errDiv.innerHTML = `<div style="color:var(--err);font-weight:600;margin-bottom:8px;">✗ ${_esc(sec.nombre)}</div>`
         + `<pre style="font-size:11px;color:var(--gray);white-space:pre-wrap;word-break:break-all;margin:0;">${_esc(sec.error || '')}</pre>`;
       cont.appendChild(errDiv);
+      return;
+    }
+
+    // ── Sugerencia de renombrado ─────────────────────────────────────
+    if (estado === 'rename_needed') {
+      const nombreOrigen  = sec.origen.replace(/\\/g,'/').split('/').pop();
+      const nombreDestino = sec.destino.replace(/\\/g,'/').split('/').pop();
+      const renDiv = document.createElement('div');
+      renDiv.style.cssText = 'background:rgba(237,137,54,.08);border:1px solid var(--warn);border-radius:8px;padding:14px 18px;margin-bottom:12px;';
+      renDiv.innerHTML = `
+        <div style="color:var(--warn);font-weight:600;margin-bottom:8px;">⚠ Excel con nombre de otra semana encontrado</div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:12px;line-height:1.6;">
+          Encontrado: <strong>${_esc(nombreOrigen)}</strong><br>
+          Se esperaba: <strong>${_esc(nombreDestino)}</strong>
+        </div>
+        <button class="btn-primary" onclick="renombrarExcel(${JSON.stringify(sec.origen)}, ${JSON.stringify(sec.destino)})">
+          Renombrar y re-validar
+        </button>`;
+      cont.appendChild(renDiv);
       return;
     }
 

@@ -64,22 +64,22 @@ def clasificar_subtitulo_ant(texto):
 def clasificar_subtitulo_cmz(texto):
   t = normalizar_texto_clave(texto)
 
-  if "movimiento mina" in t:
+  if t.startswith("movimiento mina"):
     return "Movimiento Mina"
 
-  if "extraccion mineral" in t:
+  if t.startswith("extraccion mineral"):
     return "Extracción Mineral"
 
-  if "extraccion lastre" in t or "extraccion esteril" in t:
+  if t.startswith("extraccion lastre") or t.startswith("extraccion esteril"):
     return "Extracción Lastre"
 
-  if "remanejo" in t:
+  if t.startswith("remanejo"):
     return "Remanejo"
 
   if re.match(r"^fase\s+\S+", texto.strip(), flags=re.IGNORECASE):
     return "Fase"
 
-  if "extraccion" in t:
+  if t.startswith("extraccion") or t.startswith("total extraccion"):
     return "Extracción"
 
   return None

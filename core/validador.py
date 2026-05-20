@@ -24,6 +24,14 @@ def register_error(msg: str):
         "estado": "error", "error": msg,
     })
 
+def register_rename_suggestion(origen: str, destino: str):
+    _resultados.append({
+        "clave": "__RENAME__", "nombre": "Excel de otra semana encontrado",
+        "kpis": [], "n_ok": 0, "n_warn": 0, "n_sin_celda": 0,
+        "estado": "rename_needed", "error": None,
+        "origen": origen, "destino": destino,
+    })
+
 # ── Helpers numéricos ─────────────────────────────────────────────────────────
 
 def _a_float(s):

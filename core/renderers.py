@@ -1321,7 +1321,7 @@ def cmz_render_mina(doc, texto_compania, excel_madre=None):
     elif "extraccion lastre" in clave or "extraccion esteril" in clave:
       extraccion_lastre = normalizar_linea_cmz(t)
 
-    elif "remanejo" in clave:
+    elif clave.startswith("remanejo"):
       remanejo = normalizar_linea_cmz(t)
 
     elif re.match(r"^fase\s+\S+", t, flags=re.IGNORECASE):

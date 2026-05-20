@@ -246,11 +246,18 @@ def api_semana_info():
                     if "SSO" not in fallback_anterior:
                         fallback_anterior.append("SSO")
 
+        excel_madre_candidato = None
+        if not excel_madre.is_file() and excel_madre.parent.is_dir():
+            cands = [f for f in excel_madre.parent.glob("Semana *.xlsx") if not f.name.startswith("~$")]
+            if cands:
+                excel_madre_candidato = str(cands[0])
+
         return jsonify({
             "raiz":                str(raiz),
             "raiz_ok":             raiz.is_dir(),
             "excel_madre":         str(excel_madre),
             "excel_madre_ok":      excel_madre.is_file(),
+            "excel_madre_candidato": excel_madre_candidato,
             "excel_indicadores":   excel_ind,
             "excel_indicadores_ok": bool(excel_ind),
             "carpeta_destino":     str(raiz),
@@ -393,6 +400,26 @@ def api_validar():
 def api_validar_resultado():
     from core.validador import get_resultados
     return jsonify(get_resultados())
+
+@app.route("/api/renombrar-excel", methods=["POST"])
+def api_renombrar_excel():
+    data    = request.json or {}
+    origen  = data.get("origen",  "").strip()
+    destino = data.get("destino", "").strip()
+    if not origen or not destino:
+        return jsonify({"error": "Faltan parámetros"}), 400
+    p_origen  = Path(origen)
+    p_destino = Path(destino)
+    if not p_origen.is_file():
+        return jsonify({"error": f"Archivo no encontrado: {origen}"}), 404
+    if p_destino.exists():
+        return jsonify({"error": f"Ya existe un archivo en: {destino}"}), 409
+    try:
+        p_origen.rename(p_destino)
+        print(f"[INFO] Excel renombrado: {p_origen.name} → {p_destino.name}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ── Revisar ortografía y gramática ───────────────────────────────────────────
 @app.route("/api/revisar-ortografia", methods=["POST"])
@@ -608,6 +635,13 @@ def _validar(d):
         msg = f"Word no encontrado: {ruta_word}"
         print(f"[ERROR] {msg}"); register_error(msg); return
     if not Path(ruta_excel).is_file():
+        carpeta = Path(ruta_excel).parent
+        candidatos = [f for f in carpeta.glob("Semana *.xlsx") if not f.name.startswith("~$")]
+        if candidatos:
+            from core.validador import register_rename_suggestion
+            register_rename_suggestion(str(candidatos[0]), ruta_excel)
+            print(f"[INFO] Excel no encontrado pero hay candidato: {candidatos[0].name}")
+            return
         msg = f"Excel no encontrado: {ruta_excel}"
         print(f"[ERROR] {msg}"); register_error(msg); return
 

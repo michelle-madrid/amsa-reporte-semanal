@@ -516,3 +516,54 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
 
   if clave == "CEN":
     doc.add_page_break()
+
+
+def _es_pagbreak_puro(p_elem):
+    text = ''.join(t.text or '' for t in p_elem.findall('.//' + qn('w:t'))).strip()
+    if text:
+        return False
+    for br in p_elem.findall('.//' + qn('w:br')):
+        if br.get(qn('w:type')) == 'page':
+            return True
+    return False
+
+
+def _inicia_pagina_nueva(p_elem):
+    """True si el párrafo iniciará una página nueva, ya sea por propiedad directa o por estilo de título."""
+    # 1. page_break_before explícito en el párrafo
+    pPr = p_elem.find(qn('w:pPr'))
+    if pPr is not None:
+        pbr = pPr.find(qn('w:pageBreakBefore'))
+        if pbr is not None:
+            val = pbr.get(qn('w:val'), 'true')
+            if val.lower() not in ('false', '0'):
+                return True
+        # 2. estilo de título — los estilos Título/Heading tienen page_break_before en su definición
+        pStyle = pPr.find(qn('w:pStyle'))
+        if pStyle is not None:
+            style_val = pStyle.get(qn('w:val'), '').lower()
+            if ('titulo' in style_val or 'ttulo' in style_val or 'heading' in style_val):
+                return True
+    return False
+
+
+def eliminar_paginas_blanco(doc):
+    """Elimina saltos de página puros que generan hojas en blanco."""
+    body = doc.element.body
+    children = list(body)
+    to_remove = []
+
+    for i, elem in enumerate(children):
+        if elem.tag != qn('w:p'):
+            continue
+        if not _es_pagbreak_puro(elem):
+            continue
+        next_p = next((children[j] for j in range(i + 1, len(children)) if children[j].tag == qn('w:p')), None)
+        if next_p is None or _es_pagbreak_puro(next_p) or _inicia_pagina_nueva(next_p):
+            to_remove.append(elem)
+
+    for elem in to_remove:
+        body.remove(elem)
+
+    if to_remove:
+        print(f"  → Eliminadas {len(to_remove)} hoja(s) en blanco del documento")
