@@ -355,6 +355,15 @@
     margin-top: 1px; font-size: 14px;
   }
   .revisa-item .ri-text { color: #78350F; }
+  .revisa-item.ri-expandable:hover { background: #FEF3C7; border-color: #F59E0B; }
+  .revisa-item.ri-expandable .ri-icon::after { content: ' ▸'; font-size: 10px; opacity: .6; }
+  .revisa-item.ri-open .ri-icon::after { content: ' ▾'; }
+  .ri-detail {
+    margin-top: 6px; padding: 6px 10px;
+    background: #FEF9EC; border-left: 3px solid #F59E0B;
+    border-radius: 0 4px 4px 0; font-size: 12px;
+    color: #92400E; font-family: monospace; white-space: pre-wrap; word-break: break-all;
+  }
   .result-path {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     margin-top: 6px; padding: 10px 14px;
@@ -736,6 +745,13 @@
         <span class="toggle-label">Validar KPIs automáticamente al terminar la generación</span>
       </div>
 
+      <div class="toggle-row" style="margin-top:10px; padding-left:52px; align-items:center; gap:10px;">
+        <span style="font-size:12px; color:var(--gray-l); white-space:nowrap;">Tolerancia base:</span>
+        <input type="number" id="opt_tolerancia" value="0.6" min="0" step="0.1"
+               style="width:70px; text-align:center; font-size:12px;">
+        <span style="font-size:11px; color:var(--gray-l);">Diferencia máxima permitida entre Word y Excel &nbsp;(default: 0.6)</span>
+      </div>
+
       <div class="section-sep"></div>
 
       <div class="form-grid cols-2" style="align-items:end;">
@@ -1046,6 +1062,17 @@
             <button class="btn-browse" onclick="browse('val_excel','excel')">📂 Buscar</button>
           </div>
           <span class="field-hint" id="hint_val_excel"></span>
+        </div>
+      </div>
+
+      <div class="path-field" style="margin-top:10px;">
+        <div class="pf-label">Tolerancia base</div>
+        <div class="pf-right" style="display:flex; align-items:center; gap:10px;">
+          <input type="number" id="val_tolerancia" value="0.6" min="0" step="0.1"
+                 style="width:80px; text-align:center;">
+          <span style="font-size:12px; color:var(--gray-l);">
+            Diferencia máxima permitida entre Word y Excel &nbsp;·&nbsp; default: 0.6
+          </span>
         </div>
       </div>
 
@@ -1700,16 +1727,42 @@ async function lanzarGenerar() {
     // Panel ②: Revisar manualmente
     if (reviewItems.length > 0) {
       const rbody = document.getElementById('generarRevisarBody');
-      reviewItems.forEach(txt => {
+      reviewItems.forEach(item => {
+        const txt     = typeof item === 'string' ? item : item.main;
+        const details = typeof item === 'object' ? (item.details || []) : [];
+        const hasDetail = details.length > 0;
+
         const row  = document.createElement('div');
         const ic   = document.createElement('span');
+        const body = document.createElement('div');
         const msg  = document.createElement('span');
-        row.className  = 'revisa-item';
+        row.className  = 'revisa-item' + (hasDetail ? ' ri-expandable' : '');
         ic.className   = 'ri-icon';
         ic.textContent = '!';
         msg.className  = 'ri-text';
         msg.textContent = txt.replace(/^\s*!\s*/, '');
-        row.appendChild(ic); row.appendChild(msg);
+        body.style.cssText = 'flex:1;min-width:0;';
+        body.appendChild(msg);
+
+        if (hasDetail) {
+          const det = document.createElement('div');
+          det.className = 'ri-detail';
+          det.style.display = 'none';
+          details.forEach(d => {
+            const dl = document.createElement('div');
+            dl.textContent = d;
+            det.appendChild(dl);
+          });
+          body.appendChild(det);
+          row.style.cursor = 'pointer';
+          row.addEventListener('click', () => {
+            const open = det.style.display !== 'none';
+            det.style.display = open ? 'none' : 'block';
+            row.classList.toggle('ri-open', !open);
+          });
+        }
+
+        row.appendChild(ic); row.appendChild(body);
         rbody.appendChild(row);
       });
       document.getElementById('generarRevisarWrap').style.display = 'block';
@@ -1746,7 +1799,8 @@ async function lanzarGenerar() {
         kpiWrap.querySelector('#genResSections').innerHTML = '';
         kpiWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         setTimeout(async () => {
-          await _lanzarTarea('/api/validar', { ruta_word: resultPath, ruta_excel, faenas: getFaenas() }, null, mostrarResultadosEnGenerar, { skipClearLogs: true });
+          const _tol = parseFloat(document.getElementById('opt_tolerancia')?.value) || 0.6;
+          await _lanzarTarea('/api/validar', { ruta_word: resultPath, ruta_excel, faenas: getFaenas(), tolerancia: _tol }, null, mostrarResultadosEnGenerar, { skipClearLogs: true });
         }, 300);
       }
     }
@@ -1760,8 +1814,9 @@ async function lanzarValidar() {
     alert('Ingresa (o navega) las rutas del Word y del Excel.');
     return;
   }
+  const tolerancia = parseFloat(document.getElementById('opt_tolerancia')?.value ?? document.getElementById('val_tolerancia')?.value) || 0.6;
   document.getElementById('validarResultados').style.display = 'none';
-  await _lanzarTarea('/api/validar', { ruta_word, ruta_excel, faenas: getFaenas() }, 'btnValidar', mostrarResultados);
+  await _lanzarTarea('/api/validar', { ruta_word, ruta_excel, faenas: getFaenas(), tolerancia }, 'btnValidar', mostrarResultados);
 }
 
 async function renombrarExcel(origen, destino) {
@@ -1982,9 +2037,18 @@ function appendRawLog(text) {
     resultPath = text.replace(/.*Informe generado en:\s*/i, '').trim();
   }
 
+  // Línea de detalle (ej: "          → texto...") → asociar al último aviso
+  if (reviewItems.length > 0 && /^\s{2,}→/.test(text)) {
+    const last = reviewItems[reviewItems.length - 1];
+    if (last && typeof last === 'object') {
+      last.details.push(text.trim().replace(/^→\s*/, ''));
+    }
+    return;
+  }
+
   // [REVISAR] / ! / ⚠ → solo van a la sección de revisión, NO al log inline
   if ((t.startsWith('!') || text.includes('[REVISAR]') || text.includes('⚠')) && t.length > 2) {
-    reviewItems.push(text);
+    reviewItems.push({ main: text, details: [] });
     return;
   }
 

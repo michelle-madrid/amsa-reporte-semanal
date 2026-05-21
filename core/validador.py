@@ -4,7 +4,7 @@ import re
 import time
 
 import state
-from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS
+from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS, CONFIG_KPI_FIN_VALIDACION
 
 # ── Resultado estructurado (para panel HTML) ──────────────────────────────────
 _resultados: list = []
@@ -81,22 +81,15 @@ def _normalizar_excel(valor):
     return []
 
 
+_tolerancia_base: float = 0.6
+
+def set_tolerancia_base(val: float):
+    global _tolerancia_base
+    _tolerancia_base = max(0.0, float(val))
+
 def _tol_para(raw_str):
-    """
-    Tolerancia basada en la precisión con que el Word escribe el número:
-      - sin decimal (entero ej. 238)      → ±0.6
-      - miles con coma (ej. 4,506 = 4506) → ±0.6  (la coma NO es decimal)
-      - 1 decimal    (ej. 7.4)            → ±0.06
-      - 2 decimales  (ej. 1.08)           → ±0.006
-    """
-    s = raw_str.strip().lstrip("+").lstrip("-")
-    # Coma como separador de miles: N,NNN  o  N,NNN,NNN → tolerancia de entero
-    if re.match(r'^\d{1,3}(,\d{3})+$', s):
-        return 0.6
-    m = re.search(r'\.(\d+)', raw_str)
-    if m:
-        return 0.6 / (10 ** len(m.group(1)))
-    return 0.6
+    """Tolerancia plana: la diferencia absoluta permitida es directamente _tolerancia_base."""
+    return _tolerancia_base
 
 
 def _encontrar_en_fila(v_abs, nums_fila, tol=None, signed_val=None):
@@ -519,6 +512,10 @@ _ACUMULADOS_CELDAS_FIJAS = {
         ("acumulado al mes", "B62"),
         ("acumulado al ano", "B63"),
     ],
+    "ANT": [
+        ("acumulado al mes", "B76"),
+        ("acumulado al ano", "B77"),
+    ],
 }
 
 def _agregar_acumulados_desde_excel(wb_com, nombre_hoja, tabla):
@@ -746,6 +743,7 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
     _subsecciones = {_norm(k): v for k, v in CONFIG_SUBSECCIONES_CONTEXTO.get(clave, {}).items()}
     excluidos         = {_norm(e) for e in CONFIG_KPI_EXCLUIDOS.get(clave, set())}
     prefijos_excluidos = {_norm(p) for p in CONFIG_KPI_PREFIJOS_EXCLUIDOS.get(clave, set())}
+    kpi_fin = _norm(CONFIG_KPI_FIN_VALIDACION.get(clave, "")) or None
 
     for linea in lineas:
         # Detectar subtítulos de subsección (ej. "Planta Hidro MET")
@@ -874,6 +872,11 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
             kpi["estado"] = "sin_label"
 
         _kpis.append(kpi)
+
+        # Detener validación al alcanzar el KPI configurado como límite
+        if kpi_fin and label_word and _norm(label_word).startswith(kpi_fin):
+            print(f"      ↳ Fin de validación configurado para {clave} ('{kpi_fin}')")
+            break
 
     # Verificar KPIs requeridos
     requeridos = CONFIG_KPI_REQUERIDOS.get(clave, [])

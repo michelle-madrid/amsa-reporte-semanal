@@ -313,6 +313,12 @@ CONFIG_KPI_REQUERIDOS = {
 # Aplica a cualquier compañía. Normalizado sin tildes/minúsculas al usar.
 CONFIG_KPI_SOLO_DESVIACION = {"Recuperación Cu", "Recuperacion Cu"}
 
+# Después de validar este KPI (normalizado), detener la validación para esa compañía.
+# Usado para compañías que tienen texto libre después de los KPIs formales (ej. MLP Planta Desaladora).
+CONFIG_KPI_FIN_VALIDACION = {
+    "MLP": "acumulado al ano",
+}
+
 # KPIs que deben ignorarse en la validación por compañía (el label es exactamente
 # como aparece en el Word, comparación normalizada — sin tildes, minúsculas).
 CONFIG_KPI_EXCLUIDOS = {

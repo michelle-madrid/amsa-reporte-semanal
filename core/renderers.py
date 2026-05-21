@@ -3,13 +3,14 @@
 import os
 import re
 import unicodedata
+import datetime
 
 from config import CONFIG_COMPANIAS, INCLUIR_ESTADO_FASES_DESARROLLO, ORDEN_PRINCIPALES_DESVIACIONES, NIVEL_BASE_POR_SECCION, NIVEL_POR_COMPANIA_SECCION_SUBTITULO
 from state import errores
 from utils.text_utils import *
-from utils.text_utils import _quitar_dos_puntos_inicio
+from utils.text_utils import _quitar_dos_puntos_inicio, set_seccion_desviaciones
 from utils.word_utils import *
-from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen, extraer_acumulados_cmz, extraer_acumulados_mlp
+from utils.excel_utils import exportar_imagen_excel, extraer_acumulados_oxe_cen, extraer_acumulados_cmz, extraer_acumulados_mlp, extraer_acumulados_ant
 from core.extractores import *
 
 
@@ -83,7 +84,11 @@ def mlp_render_medio_ambiente(doc, lineas):
 
     if es_subtitulo:
       agregar_viñeta(doc, texto_limpio, nivel=2, espacio_despues=6)
-      subtitulo_actual = texto_limpio
+      # "Sin eventos" no abre subgrupo: los ítems siguientes son independientes
+      if texto_limpio.lower().startswith("sin eventos"):
+        subtitulo_actual = None
+      else:
+        subtitulo_actual = texto_limpio
       dentro_de_fecha = False
       eventos_anunciados = 0
       eventos_renderizados = 0
@@ -447,8 +452,6 @@ def _ap_render_subtitulo(doc, texto):
   run.font.size = Pt(11)
 
 def mlp_render_asuntos_publicos(doc, lineas):
-  # 1. Limpiar: quitar marcadores explícitos y aplicar limpieza global
-  textos = []
   for l in lineas:
     raw = l.strip()
     if not raw:
@@ -456,64 +459,7 @@ def mlp_render_asuntos_publicos(doc, lineas):
     t = re.sub(r'^(\d+[.)]\s*|[•·○o]\s*)', '', raw).strip()
     t = limpiar_texto_global(t)
     if t:
-      textos.append(t)
-  if not textos:
-    return
-
-  # 2. Helpers de clasificación
-  def _es_bullet_cand(t):
-    # Termina en ":" y es corto: encabezado de sección (bullet negro)
-    return t.endswith(':') and len(t) <= 80 and t.count(':') == 1
-
-  def _es_sub_cand(t):
-    # Sin ":" ni ".", corto: candidato a subtítulo sin viñeta
-    return ':' not in t and not t.endswith('.') and len(t) <= 70
-
-  # 3. Clasificar con lookahead
-  # Un candidato a subtítulo ES subtítulo si la siguiente línea es bullet o subtítulo
-  tipos = []
-  for i, t in enumerate(textos):
-    if _es_bullet_cand(t):
-      tipos.append('bullet')
-    elif _es_sub_cand(t):
-      tipos.append('sub')
-    else:
-      tipos.append('circulo')
-
-  # 4. Si hay bullets, es estructura de 3 niveles; si no, 2 niveles
-  hay_bullets = 'bullet' in tipos
-
-  # 4b. En estructura 3 niveles: 'sub' que sigue a 'bullet'/'circulo' es sub-ítem → 'circulo'
-  if hay_bullets:
-    for i in range(1, len(tipos)):
-      if tipos[i] == 'sub' and tipos[i - 1] in ('bullet', 'circulo'):
-        tipos[i] = 'circulo'
-
-  # 5. Renderizar — solo círculos blancos del template (Viñeta 2 / Viñeta 3), sin negritas
-  # intro_activo: True cuando el circulo anterior terminó en ":" → los siguientes
-  # son sub-ítems de ese intro y van a nivel=3; se resetea al ver un 'sub'.
-  intro_activo = False
-  for texto, tipo in zip(textos, tipos):
-    if tipo == 'sub':
-      _ap_render_subtitulo(doc, texto)
-      intro_activo = False
-    elif tipo == 'bullet':
-      agregar_viñeta_sin_negrita(doc, texto, nivel=2, espacio_despues=6)
-      intro_activo = False
-    else:
-      # circulo: nivel 3 en estructura con bullets, o cuando es sub-ítem de intro
-      # Si intro_activo pero el prefijo antes de ':' supera 20 chars, es ítem top-level nuevo
-      if intro_activo and ':' in texto and texto.index(':') > 20:
-        intro_activo = False
-      if hay_bullets:
-        nivel = 3
-      else:
-        nivel = 3 if intro_activo else 2
-      agregar_viñeta_sin_negrita(doc, texto, nivel=nivel, espacio_despues=6)
-      # Una línea que termina en ":" abre un bloque de sub-ítems
-      if texto.endswith(':'):
-        intro_activo = True
-      # intro_activo solo se cierra con 'sub', no con cada circulo que termina en '.'
+      agregar_viñeta_sin_negrita(doc, t, nivel=2, espacio_despues=6)
 
 # Renderiza contenido específico dentro del documento Word.
 def cen_render_catodos(doc, texto_compania, excel_madre=None):
@@ -597,6 +543,11 @@ def cen_render_catodos(doc, texto_compania, excel_madre=None):
         agregar_linea_acumulado(doc, linea_acum)
 
 # Renderiza contenido específico dentro del documento Word.
+_pat_fecha_ma = re.compile(
+    r"^\d{1,2}\s+de\s+\w+",
+    re.IGNORECASE,
+)
+
 def ant_render_medio_ambiente(doc, lineas):
   dentro_subgrupo = False
 
@@ -605,30 +556,42 @@ def ant_render_medio_ambiente(doc, lineas):
     if not texto:
       continue
 
-    if texto.startswith("Fuente:") or texto.startswith("Nota:"):
+    # Quitar marcadores de viñeta para las comprobaciones de contenido
+    texto_base = re.sub(r'^[•○o·\-\s​﻿]+', '', texto).strip()
+
+    if texto_base.startswith("Fuente:") or texto_base.startswith("Nota:"):
       p = doc.add_paragraph(style="Normal AMSA")
       p.paragraph_format.left_indent = Cm(1.27)
       p.paragraph_format.first_line_indent = Cm(0)
       p.paragraph_format.line_spacing = 1.0
       p.paragraph_format.space_before = Pt(0)
       p.paragraph_format.space_after = Pt(6)
-
-      run = p.add_run(texto)
+      run = p.add_run(texto_base)
       run.font.name = "Arial"
       run.font.size = Pt(11)
-
       dentro_subgrupo = False
       continue
 
-    if texto.endswith(":"):
-      agregar_viñeta_plana(doc, texto, nivel=2, espacio_despues=6)
+    if texto_base.endswith(":") and len(texto_base) <= 80:
+      agregar_viñeta_plana(doc, texto_base, nivel=2, espacio_despues=6)
       dentro_subgrupo = True
       continue
 
+    # "Sin eventos" cierra el subgrupo: los ítems que siguen son independientes
+    if texto_base.lower().startswith("sin eventos"):
+      dentro_subgrupo = False
+      agregar_viñeta_plana(doc, texto_base, nivel=2, espacio_despues=6)
+      continue
+
+    # Líneas con fecha van siempre a nivel 2, no son sub-ítems de ningún grupo
+    if _pat_fecha_ma.match(texto_base):
+      agregar_viñeta_plana(doc, texto_base, nivel=2, espacio_despues=6)
+      continue
+
     if dentro_subgrupo:
-      agregar_viñeta_plana(doc, texto, nivel=3, espacio_despues=6)
+      agregar_viñeta_plana(doc, texto_base, nivel=3, espacio_despues=6)
     else:
-      agregar_viñeta_plana(doc, texto, nivel=2, espacio_despues=6)
+      agregar_viñeta_plana(doc, texto_base, nivel=2, espacio_despues=6)
 
 # Renderiza contenido específico dentro del documento Word.
 def ant_render_mina(doc, texto_compania, excel_madre=None):
@@ -744,12 +707,15 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
                 linea = limpiar_parentesis_ley(linea)
                 texto_base = limpiar_parentesis_ley(texto_base)
 
-            if (
+            es_acumulado = (
                 texto_base.startswith("Acumulado al mes")
                 or texto_base.startswith("Acumulado al año")
                 or texto_base.startswith("Respecto del Plan")
-            ):
-                agregar_linea_acumulado(doc, texto_base)
+            )
+            if es_acumulado:
+                # Para ANT Planta con excel_madre, los acumulados se leen del Excel al final
+                if not (nombre_compania == "ANT" and nombre_seccion == "Planta" and excel_madre):
+                    agregar_linea_acumulado(doc, texto_base)
             else:
                 es_sub_item = (
                     bool(re.match(r"^[o○]\s", texto_limpio))
@@ -761,6 +727,9 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
                     agregar_viñeta_inicio_negrita(doc, linea, nivel=nivel_base, espacio_despues=6)
                 else:
                     agregar_viñeta(doc, linea, nivel=nivel_base, espacio_despues=6)
+        if nombre_compania == "ANT" and nombre_seccion == "Planta" and excel_madre:
+            for linea_acum in extraer_acumulados_ant(excel_madre):
+                agregar_linea_acumulado(doc, linea_acum)
         return
 
     grupos = {sub: [] for sub in orden_subtitulos}
@@ -977,9 +946,22 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   run.font.name = "Arial"
   run.font.size = Pt(11)
 
+  _MESES_ES = {1:'enero',2:'febrero',3:'marzo',4:'abril',5:'mayo',6:'junio',
+               7:'julio',8:'agosto',9:'septiembre',10:'octubre',11:'noviembre',12:'diciembre'}
+
+  _anio_actual = datetime.datetime.now().year
+
+  def _norm_fecha(t):
+    """Convierte DD/MM: → DD de MMMM de YYYY: al inicio de línea."""
+    return re.sub(
+      r'^(\d{1,2})/(\d{2})(\s*:)',
+      lambda m: f"{int(m.group(1))} de {_MESES_ES.get(int(m.group(2)), m.group(2))} de {_anio_actual}{m.group(3)}",
+      t,
+    )
+
   i = 0
   while i < len(contenido):
-    texto = contenido[i]
+    texto = _norm_fecha(contenido[i])
 
     if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?(?:\sde)?\s\w+(?:\sde\s\d{4})?:", texto):
       if i + 1 < len(contenido) and contenido[i + 1].strip().startswith("Restricción:"):
@@ -1157,16 +1139,16 @@ def mlp_render_concentradora(doc, texto_compania, excel_madre=None):
 # Procesa la sección o faena indicada usando las reglas correspondientes.
 def procesar_mlp(doc, texto_compania, excel_madre):
     agregar_hechos_relevantes(doc, texto_compania, compania="MLP")
-    doc.add_page_break()
     agregar_produccion_semana_faena(doc, "MLP", excel_madre)
     doc.add_paragraph()
+    set_seccion_desviaciones(True)
     agregar_titulo(doc, "Principales Desviaciones", nivel=2)
     validar_acumulados_principales_desviaciones(texto_compania, "MLP", es_seleccionada=excel_madre is not None)
     orden = ORDEN_PRINCIPALES_DESVIACIONES["MLP"]
     for nombre_seccion, orden_subtitulos in orden.items():
         if nombre_seccion == "Mina":
             mlp_render_mina(doc, texto_compania, excel_madre)
-        elif nombre_seccion == "Planta Desaladora": 
+        elif nombre_seccion == "Planta Desaladora":
             mlp_render_planta_desaladora(doc, texto_compania, excel_madre)
         elif nombre_seccion == "Gestión Hídrica":
             mlp_render_gestion_hidrica(doc, texto_compania, excel_madre)
@@ -1175,36 +1157,38 @@ def procesar_mlp(doc, texto_compania, excel_madre):
             mlp_render_concentradora(doc, texto_compania, excel_madre)
         else:
             procesar_seccion(doc, texto_compania, "MLP", nombre_seccion, orden_subtitulos, excel_madre)
+    set_seccion_desviaciones(False)
 
 # Implementa una parte específica de la lógica del informe.
 def _procesar_faena_generica(doc, texto_compania, excel_madre, clave):
     agregar_hechos_relevantes(doc, texto_compania, compania=clave)
-    doc.add_page_break()
     agregar_produccion_semana_faena(doc, clave, excel_madre)
     doc.add_paragraph("") 
+    set_seccion_desviaciones(True)
     agregar_titulo(doc, "Principales Desviaciones", nivel=2)
     validar_acumulados_principales_desviaciones(texto_compania, clave, es_seleccionada=excel_madre is not None)
     orden = ORDEN_PRINCIPALES_DESVIACIONES.get(clave, {})
     for nombre_seccion, orden_subtitulos in orden.items():
         procesar_seccion(doc, texto_compania, clave, nombre_seccion, orden_subtitulos, excel_madre)
+    set_seccion_desviaciones(False)
 
 # Procesa la sección o faena indicada usando las reglas correspondientes.
 def procesar_ant(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="ANT")
-  doc.add_page_break()
   agregar_produccion_semana_faena(doc, "ANT", excel_madre)
   doc.add_paragraph("") 
+  set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-
   ant_render_mina(doc, texto_compania, excel_madre)
   procesar_seccion(doc, texto_compania, "ANT", "Detalle por fases", ["Extracción de Mineral", "Extracción de Lastre"], excel_madre)
   procesar_seccion(doc, texto_compania, "ANT", "Planta", [""], excel_madre)
+  set_seccion_desviaciones(False)
 
 # Procesa la sección o faena indicada usando las reglas correspondientes.
 def procesar_cen(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="CEN")
-  doc.add_page_break()
   agregar_produccion_semana_faena(doc, "CEN", excel_madre)
+  set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2, nueva_pagina=True)
   validar_acumulados_principales_desviaciones(texto_compania, "CEN", es_seleccionada=excel_madre is not None)
   procesar_seccion(
@@ -1222,9 +1206,9 @@ def procesar_cen(doc, texto_compania, excel_madre):
     ],
     excel_madre
   )
-
   procesar_seccion(doc, texto_compania, "CEN", "Sulfuros", [""], excel_madre)
   cen_render_catodos(doc, texto_compania, excel_madre)
+  set_seccion_desviaciones(False)
 
 # Renderiza contenido específico dentro del documento Word.
 def cmz_render_planta(doc, texto_compania, excel_madre=None):
@@ -1374,14 +1358,14 @@ def cmz_render_mina(doc, texto_compania, excel_madre=None):
 # Procesa la sección o faena indicada usando las reglas correspondientes.
 def procesar_cmz(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="CMZ")
-  doc.add_page_break()
   agregar_produccion_semana_faena(doc, "CMZ", excel_madre)
   doc.add_paragraph("")
+  set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
   validar_acumulados_principales_desviaciones(texto_compania, "CMZ", es_seleccionada=excel_madre is not None)
-
   cmz_render_mina(doc, texto_compania, excel_madre)
   cmz_render_planta(doc, texto_compania, excel_madre)
+  set_seccion_desviaciones(False)
 
 # Renderiza contenido específico dentro del documento Word.
 def fcab_render_medio_ambiente(doc, lineas):
@@ -1590,15 +1574,15 @@ def fcab_render_camion(doc, texto_compania, excel_madre=None):
 def procesar_fcab(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="FCAB")
 
-  doc.add_page_break()
   agregar_produccion_semana_faena(doc, "FCAB", excel_madre)
   doc.add_paragraph("")
 
+  set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
   validar_acumulados_principales_desviaciones(texto_compania, "FCAB", es_seleccionada=excel_madre is not None)
-
   fcab_render_tren(doc, texto_compania, excel_madre)
   fcab_render_camion(doc, texto_compania, excel_madre)
+  set_seccion_desviaciones(False)
 
 # Relaciona cada faena con su función procesadora principal.
 PROCESADORES_FAENA = {

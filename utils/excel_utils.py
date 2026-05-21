@@ -525,7 +525,12 @@ def _ordenar_hoja_sso(wb):
             else:
                 data_range.Sort(Key1=_cr(ws, primera_fila_datos, col_fecha), Order1=1, Header=2, Orientation=1)
             tablas_ordenadas += 1
-        print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
+        # Ajustar alto de todas las filas de datos para mostrar texto completo
+        try:
+            ws.UsedRange.EntireRow.AutoFit()
+            print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha) y alto de filas ajustado")
+        except Exception:
+            print(f"  ✓ SSO ordenada ({tablas_ordenadas} tabla(s) por fecha)")
     except Exception as e:
         msg = f"[REVISAR] No se pudo ordenar SSO: {e}"
         state.errores.append(msg)
@@ -747,6 +752,21 @@ def extraer_acumulados_mlp(ruta_excel):
         return lineas
     except Exception as e:
         state.errores.append(f"[ERROR] No se pudo leer acumulados MLP (C58:C59): {e}")
+        return []
+
+# Lee las líneas "Acumulado" de ANT desde el Excel madre (B76 y B77 de la hoja ANT).
+def extraer_acumulados_ant(ruta_excel):
+    try:
+        wb = openpyxl.load_workbook(ruta_excel, data_only=True)
+        sheet = wb["ANT"]
+        lineas = []
+        for row in (76, 77):
+            val = sheet[f"B{row}"].value
+            if val:
+                lineas.append(str(val).strip())
+        return lineas
+    except Exception as e:
+        state.errores.append(f"[ERROR] No se pudo leer acumulados ANT (B76:B77): {e}")
         return []
 
 # Lee los textos "Acumulado" de CMZ desde el Excel madre (B62 y B63 de la hoja CMZ, como líneas separadas).

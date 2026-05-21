@@ -316,10 +316,6 @@ def agregar_viñeta(doc, texto, nivel=1, bold=False, color=None, underline=False
     p.paragraph_format.line_spacing = 1.0
     p.paragraph_format.space_after = Pt(espacio_despues)
 
-    patron_especial = (
-        r"(\(\w+\))"
-    )
-
     if bold:
         run = p.add_run(texto)
         run.font.name = "Arial"
@@ -332,7 +328,7 @@ def agregar_viñeta(doc, texto, nivel=1, bold=False, color=None, underline=False
         return
 
     match_cabecera = re.search(r"^([^:]{2,40}):(\s|$)", texto)
-    if match_cabecera and not re.search(r"\(\w+\)", match_cabecera.group(1)):
+    if match_cabecera:
         cabecera = match_cabecera.group(1) + ": "
         resto = texto[match_cabecera.end():]
         run_c = p.add_run(cabecera)
@@ -341,9 +337,15 @@ def agregar_viñeta(doc, texto, nivel=1, bold=False, color=None, underline=False
         run_c.bold = True
         if underline:
             run_c.underline = True
-        _escribir_texto_con_especiales(p, resto, patron_especial)
+        run_r = p.add_run(resto)
+        run_r.font.name = "Arial"
+        run_r.font.size = Pt(11)
+        run_r.bold = False
     else:
-        _escribir_texto_con_especiales(p, texto, patron_especial)
+        run = p.add_run(texto)
+        run.font.name = "Arial"
+        run.font.size = Pt(11)
+        run.bold = False
 
 # Implementa una parte específica de la lógica del informe.
 def _escribir_texto_con_especiales(p, texto, patron):
@@ -494,14 +496,14 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
     # Faena no seleccionada: usar imagen cacheada del Word previo si existe
     img_cache = os.path.join(r"C:\Temp", f"tabla_{clave}.png")
     if os.path.exists(img_cache) and os.path.getsize(img_cache) > 0:
-      agregar_titulo(doc, "Producción Semana", nivel=2)
+      agregar_titulo(doc, "Producción Semana", nivel=2, nueva_pagina=True)
       alto_imagen = 19.3 if clave == "CEN" else None
       agregar_imagen(doc, img_cache, 19, alto_imagen, "")
       if clave == "CEN":
         doc.add_page_break()
     return
 
-  agregar_titulo(doc, "Producción Semana", nivel=2)
+  agregar_titulo(doc, "Producción Semana", nivel=2, nueva_pagina=True)
 
   img_tabla = exportar_imagen_excel(
     excel_madre,
@@ -514,23 +516,22 @@ def agregar_produccion_semana_faena(doc, clave, excel_madre):
 
   agregar_imagen(doc, img_tabla, 19, alto_imagen, "")
 
-  if clave == "CEN":
-    doc.add_page_break()
-
 
 def _es_pagbreak_puro(p_elem):
+    """True si el párrafo no tiene texto ni imágenes y genera un salto de página."""
     text = ''.join(t.text or '' for t in p_elem.findall('.//' + qn('w:t'))).strip()
     if text:
         return False
+    # Párrafo con imagen u objeto embebido — no es página en blanco
+    if p_elem.findall('.//' + qn('w:drawing')):
+        return False
+    if p_elem.findall('.//' + qn('w:object')):
+        return False
+    # Salto de página explícito: <w:br w:type="page"/>
     for br in p_elem.findall('.//' + qn('w:br')):
         if br.get(qn('w:type')) == 'page':
             return True
-    return False
-
-
-def _inicia_pagina_nueva(p_elem):
-    """True si el párrafo iniciará una página nueva, ya sea por propiedad directa o por estilo de título."""
-    # 1. page_break_before explícito en el párrafo
+    # Párrafo vacío con page_break_before también genera página en blanco
     pPr = p_elem.find(qn('w:pPr'))
     if pPr is not None:
         pbr = pPr.find(qn('w:pageBreakBefore'))
@@ -538,7 +539,18 @@ def _inicia_pagina_nueva(p_elem):
             val = pbr.get(qn('w:val'), 'true')
             if val.lower() not in ('false', '0'):
                 return True
-        # 2. estilo de título — los estilos Título/Heading tienen page_break_before en su definición
+    return False
+
+
+def _inicia_pagina_nueva(p_elem):
+    """True si el párrafo iniciará una página nueva, ya sea por propiedad directa o por estilo de título."""
+    pPr = p_elem.find(qn('w:pPr'))
+    if pPr is not None:
+        pbr = pPr.find(qn('w:pageBreakBefore'))
+        if pbr is not None:
+            val = pbr.get(qn('w:val'), 'true')
+            if val.lower() not in ('false', '0'):
+                return True
         pStyle = pPr.find(qn('w:pStyle'))
         if pStyle is not None:
             style_val = pStyle.get(qn('w:val'), '').lower()
@@ -548,22 +560,35 @@ def _inicia_pagina_nueva(p_elem):
 
 
 def eliminar_paginas_blanco(doc):
-    """Elimina saltos de página puros que generan hojas en blanco."""
+    """Elimina todos los párrafos de salto de página que generan hojas en blanco.
+    Itera hasta convergencia para cubrir casos en cascada."""
     body = doc.element.body
-    children = list(body)
-    to_remove = []
+    total_removed = 0
+    changed = True
 
-    for i, elem in enumerate(children):
-        if elem.tag != qn('w:p'):
-            continue
-        if not _es_pagbreak_puro(elem):
-            continue
-        next_p = next((children[j] for j in range(i + 1, len(children)) if children[j].tag == qn('w:p')), None)
-        if next_p is None or _es_pagbreak_puro(next_p) or _inicia_pagina_nueva(next_p):
-            to_remove.append(elem)
+    while changed:
+        changed = False
+        children = list(body)
+        to_remove = []
 
-    for elem in to_remove:
-        body.remove(elem)
+        for i, elem in enumerate(children):
+            if elem.tag != qn('w:p'):
+                continue
+            if not _es_pagbreak_puro(elem):
+                continue
+            next_p = next(
+                (children[j] for j in range(i + 1, len(children)) if children[j].tag == qn('w:p')),
+                None,
+            )
+            if next_p is None or _es_pagbreak_puro(next_p) or _inicia_pagina_nueva(next_p):
+                to_remove.append(elem)
 
-    if to_remove:
-        print(f"  → Eliminadas {len(to_remove)} hoja(s) en blanco del documento")
+        for elem in to_remove:
+            body.remove(elem)
+
+        if to_remove:
+            changed = True
+            total_removed += len(to_remove)
+
+    if total_removed:
+        print(f"  → Eliminadas {total_removed} hoja(s) en blanco del documento")

@@ -1,8 +1,16 @@
-﻿"""Utilidades de limpieza, clasificación y normalización de texto."""
+﻿"""Utilidades de limpieza, clasificacion y normalizacion de texto."""
 
 import re
+import datetime
 import unicodedata
 from state import errores
+
+# Flag: activar signo + en parentesis solo dentro de Principales Desviaciones
+_en_seccion_desviaciones = False
+
+def set_seccion_desviaciones(activo):
+    global _en_seccion_desviaciones
+    _en_seccion_desviaciones = activo
 
 # Normaliza texto para facilitar su procesamiento posterior.
 def normalizar_texto_clave(texto):
@@ -290,11 +298,42 @@ def limpiar_texto_global(texto):
   # corregir formato de hora: "15: 00" → "15:00" (debe ir después de normalizar espacios)
   texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
 
+  # espacio entre número y unidad: +0.1kOz → +0.1 kOz
+  texto = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', texto)
+
   # normalizar separadores decimales de coma a punto
   texto = normalizar_decimales(texto)
 
+  # añadir separador de miles (coma) a enteros de 4+ dígitos, excepto años (1900-2099)
+  def _sep_miles(m):
+    n = int(m.group(0))
+    if 1900 <= n <= 2099:
+      return m.group(0)
+    return f"{n:,}"
+  texto = re.sub(r'\b\d{4,}\b', _sep_miles, texto)
+
   # normalizar "plan mensual" (cualquier capitalización) → "Plan Mensual"
+  # corregir 'Esteril' sin tilde
+  texto = re.sub(r'(?i)\besteril\b', 'Estéril', texto)
+  texto = re.sub(r'(?i)\bzaldivar\b', 'Zaldívar', texto)
   texto = re.sub(r'(?i)\bplan\s+mensual\b', 'Plan Mensual', texto)
+
+  # añadir año a fechas sin él: "15 de mayo" → "15 de mayo de 2026"
+  # también normaliza "15 de mayo 2026" → "15 de mayo de 2026"
+  _anio = datetime.datetime.now().year
+  _meses_pat = r'(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)'
+  # caso: "DD de MES YYYY" (falta "de" antes del año)
+  texto = re.sub(
+    rf'(\d{{1,2}}\s+de\s+{_meses_pat})\s+(\d{{4}})\b',
+    lambda m: f"{m.group(1)} de {m.group(3)}",
+    texto, flags=re.IGNORECASE,
+  )
+  # caso: "DD de MES" sin año (no seguido de " de YYYY")
+  texto = re.sub(
+    rf'(\d{{1,2}}\s+de\s+{_meses_pat})(?!\s+de\s+\d{{4}})',
+    lambda m: f"{m.group(1)} de {_anio}",
+    texto, flags=re.IGNORECASE,
+  )
 
   # normalizar "alto potencial (aap)" (cualquier capitalización) → "Alto Potencial (AAP)"
   texto = re.sub(r'(?i)\balto\s+potencial\s*\(\s*aap\s*\)', 'Alto Potencial (AAP)', texto)
@@ -331,9 +370,36 @@ def limpiar_texto_global(texto):
     texto = texto[:-1] + "."
   elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
     texto = texto + "."
-
+  # Añadir '+' en paréntesis solo en Principales Desviaciones
+  if _en_seccion_desviaciones:
+    def _signo_positivo(m):
+      content = m.group(1)
+      if re.search(r'\b\d{1,2}[/\-]\d{1,2}\b', content):
+        return '(' + content + ')'
+      def _add_plus(sub_m):
+        pos = sub_m.start()
+        if re.search(r'[+\-‑]', content[max(0, pos - 3):pos]):
+          return sub_m.group(0)
+        return '+' + sub_m.group(1)
+      return '(' + re.sub(r'(?<![+\-‑\d\.,])(\d)', _add_plus, content) + ')'
+    texto = re.sub(r'\(([^()]+)\)', _signo_positivo, texto)
+    texto = re.sub(r'\+\s*\+', '+', texto)
+    texto = re.sub(r'-\s*\+', '-', texto)
+    # Verificar que la primera parte de KPIs (valor; %) no tenga decimales
+    for _kpi_m in re.finditer(r'\(([^;()]+);[^()]*\)', texto):
+      _primera = _kpi_m.group(1).strip()
+      if re.search(r'\d+\.\d+', _primera):
+        _msg = f"DECIMAL EN KPI — la primera parte no debe ser decimal: {_kpi_m.group(0)}"
+        print(f"[REVISAR] {_msg}")
+        print(f"          → {texto[:80].strip()}")
+        errores.append(_msg)
   # NBSP antes del '-' (evita corte de línea); elimina espacio visible entre '-' y dígito.
   texto = re.sub(r'([ (])-\s*(\d)', lambda m: (' ' if m.group(1)==' ' else m.group(1)) + '‑' + m.group(2), texto)
+
+  # eliminar espacios antes de coma o punto y coma
+  texto = re.sub(r' +([,;])', r'\1', texto)
+  # colapsar espacios dobles o mas que pudieran haberse generado en pasos anteriores
+  texto = re.sub(r' {2,}', ' ', texto)
 
   return texto
 

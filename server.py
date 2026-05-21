@@ -628,8 +628,12 @@ def _validar(d):
     ruta_excel = d.get("ruta_excel", "").strip()
     faenas     = d.get("faenas") or None   # None → valida todo
 
-    from core.validador import validar_kpis_vs_excel, reset_resultados, register_error
+    from core.validador import validar_kpis_vs_excel, reset_resultados, register_error, set_tolerancia_base
     reset_resultados()
+    try:
+        set_tolerancia_base(float(d.get("tolerancia", 0.6)))
+    except (TypeError, ValueError):
+        set_tolerancia_base(0.6)
 
     if not Path(ruta_word).is_file():
         msg = f"Word no encontrado: {ruta_word}"
