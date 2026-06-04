@@ -584,7 +584,8 @@ def actualizar_secciones_word(
 # ─────────────────────────────────────────────────────────────────────────────
 # Generar informe semanal completo a partir de los archivos de entrada.
 # ─────────────────────────────────────────────────────────────────────────────
-def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True, disco=None):
+def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
+                    disco=None, carpeta_personalizada=None):
     def pedir_entero(mensaje, minimo, maximo):
         while True:
             valor = input(mensaje).strip()
@@ -651,7 +652,8 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True, dis
         return seleccionar_archivo(mensaje)
 
     if MODO_DEBUG:
-        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
+        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year,
+                                       disco=disco, carpeta_personalizada=carpeta_personalizada)
         excel_madre       = _resolver_archivo(rutas["excel_madre"], "Excel Base")
         excel_indicadores = _resolver_unico_xlsx(rutas["excel_indicadores_dir"], "Excel de indicadores SSO") if incluir_sso else ""
         carpeta_destino   = rutas["carpeta_destino"] if Path(rutas["carpeta_destino"]).is_dir() else seleccionar_carpeta()

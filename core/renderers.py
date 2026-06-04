@@ -699,6 +699,9 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
             r"|^(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s",
             re.IGNORECASE,
         )
+        # Cuando una viñeta principal termina en ":", las viñetas siguientes son
+        # sub-ítems y deben ir un nivel más adentro hasta el próximo título principal.
+        en_sublista = False
         for linea in contenido:
             texto_limpio = linea.strip()
             texto_base = re.sub(r"^[•○o·\-\s\u200b\ufeff]+", "", texto_limpio).strip()
@@ -716,10 +719,14 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
                 # Para ANT Planta con excel_madre, los acumulados se leen del Excel al final
                 if not (nombre_compania == "ANT" and nombre_seccion == "Planta" and excel_madre):
                     agregar_linea_acumulado(doc, texto_base)
+                en_sublista = False
             else:
+                # Un título principal tiene "Etiqueta:" al inicio (label corto + dos puntos)
+                es_titulo = bool(re.match(r"^[^:]{1,50}:\s\S", texto_base))
                 es_sub_item = (
                     bool(re.match(r"^[o○]\s", texto_limpio))
                     or bool(_pat_fecha_pd.match(texto_base))
+                    or (en_sublista and not es_titulo)
                 )
                 if es_sub_item:
                     agregar_viñeta_plana(doc, texto_base, nivel=nivel_base + 1, espacio_despues=6)
@@ -727,6 +734,13 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
                     agregar_viñeta_inicio_negrita(doc, linea, nivel=nivel_base, espacio_despues=6)
                 else:
                     agregar_viñeta(doc, linea, nivel=nivel_base, espacio_despues=6)
+
+                # Estado de sublista: ":" final la abre; un nuevo título principal
+                # (no sub-ítem) la cierra; un sub-ítem la mantiene abierta.
+                if texto_base.rstrip().endswith(":"):
+                    en_sublista = True
+                elif not es_sub_item:
+                    en_sublista = False
         if nombre_compania == "ANT" and nombre_seccion == "Planta" and excel_madre:
             for linea_acum in extraer_acumulados_ant(excel_madre):
                 agregar_linea_acumulado(doc, linea_acum)
@@ -963,7 +977,7 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   while i < len(contenido):
     texto = _norm_fecha(contenido[i])
 
-    if re.match(r"^\d{1,2}(?:\sal\s\d{1,2})?(?:\sde)?\s\w+(?:\sde\s\d{4})?:", texto):
+    if re.match(r"^\d{1,2}(?:\s(?:al|y)\s\d{1,2})?(?:\sde)?\s\w+(?:\sde\s\d{4})?:", texto):
       if i + 1 < len(contenido) and contenido[i + 1].strip().startswith("Restricción:"):
         texto = texto.strip() + " " + contenido[i + 1].strip()
         i += 1

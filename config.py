@@ -35,7 +35,7 @@ def _build_raiz(base, year, mes, num_semana, di, abr_ini, df, abr_fin):
     return base / str(year) / carpeta_mes / carpeta_semana
 
 
-def construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=None):
+def construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=None, carpeta_personalizada=None):
     """Devuelve las rutas esperadas para la semana dada según la estructura de carpetas estándar.
 
     Si se indica `disco` (ej. "N:" o "Z:"), se usa esa unidad en lugar de la definida en
@@ -52,21 +52,23 @@ def construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin,
     abr_ini = _MESES_ABR[mi]
     abr_fin = _MESES_ABR[mf]
 
-    if disco:
-        disco_norm = disco.strip().rstrip("/\\")
-        if not disco_norm.endswith(":"):
-            disco_norm += ":"
-        base = Path(disco_norm + _RUTA_BASE_SIN_DISCO)
+    if carpeta_personalizada:
+        # El usuario eligió "No" al disco compartido: su carpeta se usa tal cual como raíz.
+        raiz = Path(carpeta_personalizada)
     else:
-        base = Path(RUTA_BASE_SEMANAS)
+        if disco:
+            disco_norm = disco.strip().rstrip("/\\")
+            if not disco_norm.endswith(":"):
+                disco_norm += ":"
+            base = Path(disco_norm + _RUTA_BASE_SIN_DISCO)
+        else:
+            base = Path(RUTA_BASE_SEMANAS)
 
-    # Candidatos: primero mes_fin (convención habitual), luego mes_inicio si son distintos
-    candidatos = [_build_raiz(base, year, mf, num_semana, di, abr_ini, df, abr_fin)]
-    if mi != mf:
-        candidatos.append(_build_raiz(base, year, mi, num_semana, di, abr_ini, df, abr_fin))
-
-    # Usar la primera carpeta que exista; si ninguna existe, usar la primera candidata
-    raiz = next((c for c in candidatos if c.is_dir()), candidatos[0])
+        # Candidatos: primero mes_fin, luego mes_inicio si son distintos
+        candidatos = [_build_raiz(base, year, mf, num_semana, di, abr_ini, df, abr_fin)]
+        if mi != mf:
+            candidatos.append(_build_raiz(base, year, mi, num_semana, di, abr_ini, df, abr_fin))
+        raiz = next((c for c in candidatos if c.is_dir()), candidatos[0])
 
     sso_dir = raiz / "06 -SSO"
 

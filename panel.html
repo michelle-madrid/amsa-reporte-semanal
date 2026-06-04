@@ -1668,7 +1668,12 @@ async function lanzarGenerar() {
     const disco = getDiscoNombre();
     if (disco) data.disco = disco;
   }
-
+  // Si NO es disco compartido y hay carpeta elegida, mandar la raíz override
+  if (getDiscoMode() === 'no') {
+    const raiz = document.getElementById('pathRaiz').value.trim();
+    if (raiz) data.raiz_override = raiz;
+  }
+  
   const payload = {
     ...data,
     faenas:              faenasSeleccionadas,

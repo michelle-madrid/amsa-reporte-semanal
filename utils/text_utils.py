@@ -374,15 +374,25 @@ def limpiar_texto_global(texto):
   if _en_seccion_desviaciones:
     def _signo_positivo(m):
       content = m.group(1)
+      # no aplicar '+' a fechas: numéricas (30-5-2026) ni textuales (30 de mayo de 2026)
       if re.search(r'\b\d{1,2}[/\-]\d{1,2}\b', content):
+        return '(' + content + ')'
+      if re.search(rf'\d{{1,2}}\s+de\s+{_meses_pat}', content, flags=re.IGNORECASE):
         return '(' + content + ')'
       def _add_plus(sub_m):
         pos = sub_m.start()
         if re.search(r'[+\-‑]', content[max(0, pos - 3):pos]):
           return sub_m.group(0)
+        # no '+' si el dígito va precedido por una letra (refs de fase/pala: F12, S04)
+        if pos > 0 and content[pos - 1].isalpha():
+          return sub_m.group(0)
+        # no '+' si el número son horas (ej: 11 h, 11 hrs)
+        if re.match(r'\d+(?:[.,]\d+)?\s*h(?:rs?)?\b', content[pos:]):
+          return sub_m.group(0)
         return '+' + sub_m.group(1)
       return '(' + re.sub(r'(?<![+\-‑\d\.,])(\d)', _add_plus, content) + ')'
-    texto = re.sub(r'\(([^()]+)\)', _signo_positivo, texto)
+    # Solo el paréntesis al inicio del párrafo (KPI), no los del texto explicativo
+    texto = re.sub(r'\(([^()]+)\)', _signo_positivo, texto, count=1)
     texto = re.sub(r'\+\s*\+', '+', texto)
     texto = re.sub(r'-\s*\+', '-', texto)
     # Verificar que la primera parte de KPIs (valor; %) no tenga decimales

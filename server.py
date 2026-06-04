@@ -101,71 +101,51 @@ def api_semana_info():
         from utils.excel_utils import _PATRON_EXCEL_FAENA
 
         from datetime import date, timedelta
-
         disco = d.get("disco") or None
+        raiz_override = (d.get("raiz_override") or "").strip() or None
         rutas = construir_rutas_semana(
             d["num_semana"], d["dia_inicio"], d["mes_inicio"],
             d["dia_fin"],    d["mes_fin"],    d["year"],
             disco=disco,
+            carpeta_personalizada=raiz_override,   # ← arma todo desde TU carpeta, no desde N:
         )
 
-        # Buscar carpeta de semana anterior en disco (más robusto que calcular fechas)
+        # Buscar carpeta de semana anterior — SOLO en disco compartido.
+        # Con carpeta propia no se toca N: en absoluto.
         dirs_ant = {}
-        try:
-            num_ant = max(1, int(d["num_semana"]) - 1)
-            raiz_actual = Path(rutas["raiz"])
-            # Buscar en el mismo directorio de mes
-            _parent = raiz_actual.parent
-            _prev = [f for f in _parent.iterdir()
-                     if f.is_dir() and f.name.startswith(f"{num_ant}_")] if _parent.is_dir() else []
-            # Si no está en el mismo mes, recorrer todos los meses del año
-            if not _prev:
-                _year_dir = _parent.parent
-                if _year_dir.is_dir():
-                    for _mes_dir in _year_dir.iterdir():
-                        if _mes_dir.is_dir():
-                            _prev += [f for f in _mes_dir.iterdir()
-                                      if f.is_dir() and f.name.startswith(f"{num_ant}_")]
-            if _prev:
-                _raiz_ant = _prev[0]
-                dirs_ant = {
-                    "MLP":  _raiz_ant / "01 -MLP",
-                    "CEN":  _raiz_ant / "02 -CEN",
-                    "ANT":  _raiz_ant / "03 -ANT",
-                    "CMZ":  _raiz_ant / "04 -CMZ",
-                    "FCAB": _raiz_ant / "05 -FCAB",
-                    "SSO":  _raiz_ant / "06 -SSO",
-                }
-                _gh = next((f for f in _raiz_ant.iterdir()
-                            if f.is_dir() and f.name.startswith("07")), None) if _raiz_ant.is_dir() else None
-                if _gh:
-                    dirs_ant["Gestión Hídrica"] = _gh
-        except Exception as e:
-            print(f"  ! No se pudo determinar carpeta semana anterior: {e}")
+        if not raiz_override:
+            try:
+                num_ant = max(1, int(d["num_semana"]) - 1)
+                raiz_actual = Path(rutas["raiz"])
+                _parent = raiz_actual.parent
+                _prev = [f for f in _parent.iterdir()
+                         if f.is_dir() and f.name.startswith(f"{num_ant}_")] if _parent.is_dir() else []
+                if not _prev:
+                    _year_dir = _parent.parent
+                    if _year_dir.is_dir():
+                        for _mes_dir in _year_dir.iterdir():
+                            if _mes_dir.is_dir():
+                                _prev += [f for f in _mes_dir.iterdir()
+                                          if f.is_dir() and f.name.startswith(f"{num_ant}_")]
+                if _prev:
+                    _raiz_ant = _prev[0]
+                    dirs_ant = {
+                        "MLP":  _raiz_ant / "01 -MLP",
+                        "CEN":  _raiz_ant / "02 -CEN",
+                        "ANT":  _raiz_ant / "03 -ANT",
+                        "CMZ":  _raiz_ant / "04 -CMZ",
+                        "FCAB": _raiz_ant / "05 -FCAB",
+                        "SSO":  _raiz_ant / "06 -SSO",
+                    }
+                    _gh = next((f for f in _raiz_ant.iterdir()
+                                if f.is_dir() and f.name.startswith("07")), None) if _raiz_ant.is_dir() else None
+                    if _gh:
+                        dirs_ant["Gestión Hídrica"] = _gh
+            except Exception as e:
+                print(f"  ! No se pudo determinar carpeta semana anterior: {e}")
 
-        # Si el usuario eligió la carpeta manualmente, usarla como raíz
-        raiz_override = (d.get("raiz_override") or "").strip()
-        if raiz_override:
-            raiz_base = Path(raiz_override)
-            # Reconstruir todas las sub-rutas relativas dentro de la raíz elegida
-            rutas["raiz"]                = raiz_base
-            rutas["excel_madre"]         = raiz_base / Path(rutas["excel_madre"]).name
-            rutas["excel_indicadores_dir"] = raiz_base / "06 -SSO"
-            rutas["carpeta_destino"]     = str(raiz_base)
-            rutas["informes_dirs"]       = {
-                "MLP":  raiz_base / "01 -MLP",
-                "CEN":  raiz_base / "02 -CEN",
-                "ANT":  raiz_base / "03 -ANT",
-                "CMZ":  raiz_base / "04 -CMZ",
-                "FCAB": raiz_base / "05 -FCAB",
-            }
-            # Gestión Hídrica: primera subcarpeta que empiece con "07"
-            gh_dir = next((f for f in raiz_base.iterdir()
-                           if f.is_dir() and f.name.startswith("07")), None) if raiz_base.is_dir() else None
-            rutas["excels_adicionales_dirs"] = {
-                "SSO":             raiz_base / "06 -SSO",
-                "Gestión Hídrica": gh_dir or raiz_base / "07 -Gestión Hídrica",
-            }
+        # El bloque de reconstrucción manual ya no hace falta: construir_rutas_semana
+        # arma todas las sub-rutas desde la carpeta personalizada cuando se pasa.
 
         raiz        = Path(rutas["raiz"])
         excel_madre = Path(rutas["excel_madre"])
@@ -467,11 +447,18 @@ def _mock_input(responses: list):
 def _generar(d):
     global _path_overrides
 
+    raiz_override = (d.get("raiz_override") or "").strip() or None
+    disco         = d.get("disco") or None
+    # En modo "No disco compartido" la raíz es la carpeta elegida en el panel.
+    if not disco and not raiz_override:
+        raiz_override = (d.get("carpeta_destino") or "").strip() or None
+
     from config import construir_rutas_semana
     rutas = construir_rutas_semana(
         d["num_semana"], d["dia_inicio"], d["mes_inicio"],
         d["dia_fin"],    d["mes_fin"],    d["year"],
-        disco=d.get("disco") or None,
+        disco=disco,
+        carpeta_personalizada=raiz_override,   # ← esto faltaba en la línea 471
     )
 
     carpeta_destino = d.get("carpeta_destino", "").strip() or str(rutas["raiz"])
@@ -541,6 +528,7 @@ def _generar(d):
                 incluir_sso           = d.get("incluir_sso", True),
                 incluir_gh            = d.get("incluir_gh",  True),
                 disco                 = d.get("disco") or None,
+                carpeta_personalizada = raiz_override,
             )
         else:
             # ── Modo Word nuevo: generación completa (comportamiento original) ──
@@ -563,6 +551,7 @@ def _generar(d):
                 incluir_sso     = d.get("incluir_sso", True),
                 incluir_gh      = d.get("incluir_gh",  True),
                 disco           = d.get("disco") or None,
+                carpeta_personalizada = raiz_override,
             )
 
         # Verificar formato del documento generado
