@@ -4,7 +4,7 @@ import re
 import time
 
 import state
-from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS, CONFIG_KPI_FIN_VALIDACION
+from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS, CONFIG_KPI_FIN_VALIDACION, CONFIG_CONTEXTO_POR_LABEL
 
 # ── Resultado estructurado (para panel HTML) ──────────────────────────────────
 _resultados: list = []
@@ -160,17 +160,31 @@ def _norm(texto):
 
 _BULLETS = set('·•‣▸▹►-–—*')
 
+# Glifos de viñeta + espacios/zero-width al inicio de línea. Los renderers de
+# bullets manuales (ej. agregar_bullet_negro_manual) insertan "•  " como texto
+# literal, por lo que el Word final trae el glifo en p.text. Hay que limpiarlo
+# antes de extraer la etiqueta, o KPIs legítimos (ej. "Producción Total de
+# Cátodos de Cu") se descartan y nunca se validan.
+_BULLET_PREFIX = re.compile(r'^[\s·•‣▸▹►○\-–—*​﻿]+')
+
 def _extraer_label(linea):
     """
     Extrae la parte de texto (etiqueta KPI) al inicio de una línea, antes del primer número.
     Devuelve None si:
-      - La línea empieza con viñeta o símbolo
+      - Tras limpiar viñetas iniciales la línea queda vacía
       - La etiqueta resultante es muy corta (< 3 chars)
     """
     if not linea:
         return None
-    if linea[0] in _BULLETS:
+    linea = _BULLET_PREFIX.sub('', linea)
+    if not linea:
         return None
+    # Código de fase compacto (ej. "F05", "F6") usado en ANT "Detalle por fases".
+    # El dígito viene tan al inicio que la heurística general lo descartaría, así
+    # que se reconoce explícitamente como etiqueta.
+    m_fase = re.match(r'F\s*\d{1,2}(?=\W|$)', linea, re.IGNORECASE)
+    if m_fase:
+        return re.sub(r'\s+', '', m_fase.group(0)).upper()
     m = re.search(r'\d', linea)
     if m and m.start() > 3:
         label = re.sub(r'[\s:(;\-+‑]+$', '', linea[:m.start()]).strip()
@@ -741,6 +755,7 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
     _kpis = []   # resultados estructurados de esta sección
     contexto_suffix = None   # sufijo de subsección activo (ej. "MET", "OXE")
     _subsecciones = {_norm(k): v for k, v in CONFIG_SUBSECCIONES_CONTEXTO.get(clave, {}).items()}
+    _contexto_por_label = {_norm(k): v for k, v in CONFIG_CONTEXTO_POR_LABEL.get(clave, {}).items()}
     excluidos         = {_norm(e) for e in CONFIG_KPI_EXCLUIDOS.get(clave, set())}
     prefijos_excluidos = {_norm(p) for p in CONFIG_KPI_PREFIJOS_EXCLUIDOS.get(clave, set())}
     kpi_fin = _norm(CONFIG_KPI_FIN_VALIDACION.get(clave, "")) or None
@@ -757,6 +772,9 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         linea_dev = _truncar_en_status(linea)
         linea_dev = re.sub(r' ', '', linea_dev)
         linea_dev = re.sub(r'([+\-])\s(\d)', r'\1\2', linea_dev)
+        # Quitar el código de fase inicial (ej. "F05") para que su dígito no se
+        # cuele como valor numérico a comparar.
+        linea_dev = re.sub(r'^F\s*\d{1,2}\b', '', linea_dev, flags=re.IGNORECASE)
         numeros = _numeros_de_linea(linea_dev)
         if not numeros:
             continue
@@ -868,10 +886,24 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
             n_sin_fila += 1
             kpi["estado"] = "sin_celda"
         else:
-            print(f"      (línea de viñeta — sin etiqueta para match)")
-            kpi["estado"] = "sin_label"
+            # La línea tiene valores numéricos pero no se pudo extraer una
+            # etiqueta: es un valor "huérfano" que no se asoció a ningún
+            # indicador. No debe pasar en silencio — se marca para revisión.
+            print(f"      ✗ Valor(es) sin indicador asociado — no se pudo extraer etiqueta")
+            n_warn += 1
+            kpi["estado"] = "revisar"
 
         _kpis.append(kpi)
+
+        # Actualizar contexto para las líneas SIGUIENTES (no la actual). Permite
+        # que las fases (F05..F08) tras "Extracción de Mineral"/"Extracción de
+        # Lastre" busquen su celda con el sufijo correcto y no se confundan entre sí.
+        if label_word and _contexto_por_label:
+            _lbl_n = _norm(label_word)
+            for pref, suf in _contexto_por_label.items():
+                if _lbl_n.startswith(pref):
+                    contexto_suffix = suf
+                    break
 
         # Detener validación al alcanzar el KPI configurado como límite
         if kpi_fin and label_word and _norm(label_word).startswith(kpi_fin):
@@ -887,6 +919,38 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
             print(f"  ✗ {msg}")
             n_warn += 1
             _kpis.append({"linea": msg, "label": req, "excel_label": None,
+                          "estado": "revisar", "valores": []})
+
+    # ── Verificación inversa (Excel → Word) ───────────────────────────────────
+    # Recorre TODOS los KPIs configurados en el Excel (CONFIG_CELDAS_DESVIACIONES)
+    # y verifica que cada uno se haya encontrado y comparado en el Word. Si un
+    # indicador definido en el Excel no se validó, se marca — no debe pasar en
+    # silencio. Se rastrea por la celda de diferencia para tolerar alias (varias
+    # etiquetas que apuntan a la misma celda) y sufijos de contexto (MET/OXE).
+    celdas_cfg = CONFIG_CELDAS_DESVIACIONES.get(clave)
+    if celdas_cfg:
+        celda_de = {_norm(lbl): (cells[0] if cells else None)
+                    for lbl, cells in celdas_cfg.items()}
+        celdas_validadas = {
+            celda_de[_norm(k["excel_label"])]
+            for k in _kpis
+            if k.get("excel_label") and _norm(k["excel_label"]) in celda_de
+        }
+        reportadas = set()
+        for lbl, cells in celdas_cfg.items():
+            celda = cells[0] if cells else None
+            if celda in celdas_validadas or celda in reportadas:
+                continue
+            lbl_norm = _norm(lbl)
+            # Respetar las exclusiones configuradas para la compañía
+            if any(e in lbl_norm for e in excluidos) or \
+               any(lbl_norm.startswith(p) for p in prefijos_excluidos):
+                continue
+            reportadas.add(celda)
+            msg = f"KPI del Excel sin validar en el Word: '{lbl}' ({celda})"
+            print(f"  ✗ {msg}")
+            n_warn += 1
+            _kpis.append({"linea": msg, "label": lbl, "excel_label": lbl,
                           "estado": "revisar", "valores": []})
 
     print()
@@ -911,12 +975,19 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
     if n_warn == 0 and n_sin_fila == 0:
         print(f"  ✓ Sin diferencias  ({lineas_revisadas} línea(s) revisada(s))")
         return 1, 0
-    if n_warn > 0:
-        print(f"  ! {n_warn} valor(es) con diferencias, {n_sin_fila} etiqueta(s) sin fila Excel")
-        state.errores.append(f"[REVISAR] {clave}: {n_warn} diferencia(s) en validación KPI")
-    else:
-        print(f"  ! {n_sin_fila} etiqueta(s) sin fila Excel correspondiente — revisar nombres")
-    return 0, n_warn
+
+    # Tanto las diferencias (n_warn) como las etiquetas sin celda Excel
+    # (n_sin_fila) son brechas de validación: se reportan a state.errores y
+    # se cuentan en el total para que ninguna pase en silencio en el resumen.
+    partes = []
+    if n_warn:
+        partes.append(f"{n_warn} diferencia(s)")
+    if n_sin_fila:
+        partes.append(f"{n_sin_fila} sin celda Excel")
+    detalle = ", ".join(partes)
+    print(f"  ! {detalle}")
+    state.errores.append(f"[REVISAR] {clave}: {detalle} en validación KPI")
+    return 0, n_warn + n_sin_fila
 
 
 # ── Validador principal ───────────────────────────────────────────────────────

@@ -68,7 +68,24 @@ def construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin,
         candidatos = [_build_raiz(base, year, mf, num_semana, di, abr_ini, df, abr_fin)]
         if mi != mf:
             candidatos.append(_build_raiz(base, year, mi, num_semana, di, abr_ini, df, abr_fin))
-        raiz = next((c for c in candidatos if c.is_dir()), candidatos[0])
+        raiz = next((c for c in candidatos if c.is_dir()), None)
+        # Si el nombre exacto no existe, la carpeta puede estar nombrada de forma
+        # ligeramente distinta (ej. "...04 junio" en vez de "...04 jun", o espacios
+        # diferentes). Se localiza por número de semana dentro de las carpetas de
+        # mes candidatas. Esto NO cambia el fallback de archivos: la selección de
+        # Word/Excel por faena sigue cayendo a la semana anterior cuando el archivo
+        # actual no existe; solo permite reconocer la carpeta y ofrecer renombrar.
+        if raiz is None:
+            for c in candidatos:
+                mes_dir = c.parent
+                if mes_dir.is_dir():
+                    match = next((f for f in sorted(mes_dir.iterdir())
+                                  if f.is_dir() and f.name.startswith(f"{num_semana}_Semana")), None)
+                    if match:
+                        raiz = match
+                        break
+        if raiz is None:
+            raiz = candidatos[0]
 
     sso_dir = raiz / "06 -SSO"
 
@@ -150,6 +167,16 @@ CONFIG_CELDAS_DESVIACIONES = {
         # ── Mina (Fases) — encabezados de sección ─────────────────────────────
         "Extracción de Mineral":        ("D56", "F56", "G56"),
         "Extracción de Lastre":         ("D62", "F62", "G62"),
+        # ── Detalle por fases — Extracción de Mineral (Word: F05..F08) ─────────
+        "F05 mineral":                  ("D57", "F57", "G57"),
+        "F06 mineral":                  ("D58", "F58", "G58"),
+        "F07 mineral":                  ("D59", "F59", "G59"),
+        "F08 mineral":                  ("D60", "F60", "G60"),
+        # ── Detalle por fases — Extracción de Lastre (Word: F05..F08) ──────────
+        "F05 lastre":                   ("D63", "F63", "G63"),
+        "F06 lastre":                   ("D64", "F64", "G64"),
+        "F07 lastre":                   ("D65", "F65", "G65"),
+        "F08 lastre":                   ("D66", "F66", "G66"),
         # ── Planta ────────────────────────────────────────────────────────────
         "Mineral Apilado":              ("D68", "F68", "G68"),
         "Mineral Beneficiado":          ("D69", "F69", "G69"),
@@ -344,6 +371,20 @@ CONFIG_SUBSECCIONES_CONTEXTO = {
     "CEN": {
         "Planta Hidro MET": "MET",
         "Planta Hidro OXE": "OXE",
+    },
+}
+
+# Etiquetas de KPI que, ADEMÁS de validarse normalmente, fijan un contexto para
+# las líneas siguientes. A diferencia de CONFIG_SUBSECCIONES_CONTEXTO (subtítulos
+# puros que se omiten), estas líneas sí son KPIs que se comparan. Se usa para las
+# fases de ANT: tras "Extracción de Mineral" vienen las fases F05..F08 de mineral
+# (D57..D60) y tras "Extracción de Lastre" las de lastre (D63..D66). El sufijo se
+# añade al label de la fase al buscar su celda (ej. "F06" + "lastre" → "F06 lastre").
+# Formato: { "CLAVE": { "prefijo_label_normalizado": "SUFIJO" } }
+CONFIG_CONTEXTO_POR_LABEL = {
+    "ANT": {
+        "extraccion de mineral": "mineral",
+        "extraccion de lastre":  "lastre",
     },
 }
 

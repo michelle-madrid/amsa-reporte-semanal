@@ -8,7 +8,7 @@ from tkinter import filedialog
 import openpyxl
 import win32com.client as win32
 from openpyxl.utils import get_column_letter, column_index_from_string
-from PIL import ImageGrab
+from PIL import Image, ImageGrab
 
 import state
 from config import SSO_MARCADOR_TABLA
@@ -141,13 +141,23 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
         for addr in lista_rangos[1:]:
             rng = excel.Union(rng, ws.Range(addr))
 
-        rng.CopyPicture(Appearance=1, Format=2)
-        time.sleep(1)
-        img = ImageGrab.grabclipboard()
-        if img:
+        # CopyPicture + lectura del portapapeles puede fallar de forma intermitente:
+        # grabclipboard() devuelve None (clipboard aún no listo) o una lista de rutas
+        # (CF_HDROP en vez de bitmap). Reintentamos varias veces aumentando la espera.
+        img = None
+        intentos = 4
+        for intento in range(intentos):
+            rng.CopyPicture(Appearance=1, Format=2)
+            time.sleep(1 + intento * 0.5)
+            capturado = ImageGrab.grabclipboard()
+            if isinstance(capturado, Image.Image):
+                img = capturado
+                break
+
+        if img is not None:
             img.save(imagen_salida, "PNG")
         else:
-            msg = f"[ERROR] No se pudo obtener imagen del portapapeles ({hoja} {rango_desc})"
+            msg = f"[ERROR] No se pudo obtener imagen del portapapeles ({hoja} {rango_desc}) tras {intentos} intentos"
             state.errores.append(msg)
             print(f"  ✗ {msg}")
 
