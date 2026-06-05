@@ -110,8 +110,14 @@ def mlp_render_medio_ambiente(doc, lineas):
     )
 
     if texto_limpio.startswith("Calidad del aire"):
+      # "Calidad del aire" siempre va al primer nivel de viñeta (como "Reporte
+      # eventos a la SMA" / "Reportes con la autoridad"), no anidada bajo el
+      # subtítulo anterior. Se reinicia el estado para que sea un bloque propio.
       dentro_de_fecha = False
-      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=3 if en_nivel_profundo else 2, espacio_despues=6)
+      subtitulo_actual = None
+      eventos_anunciados = 0
+      eventos_renderizados = 0
+      agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=2, espacio_despues=6)
       continue
 
     match_fecha = patron_fecha.match(texto_limpio)
@@ -467,6 +473,7 @@ def cen_render_catodos(doc, texto_compania, excel_madre=None):
   if not contenido:
     return
 
+  agregar_linea_vacia(doc)
   agregar_texto(doc, "Cátodos:", bold=True, color=(0x00, 0x77, 0x8B))
 
   linea_total = None
@@ -502,7 +509,8 @@ def cen_render_catodos(doc, texto_compania, excel_madre=None):
       left_indent_cm=1.27,
       bullet_indent_cm=0.85,
       espacio_despues=6,
-      bold=True
+      bold=True,
+      espacio_antes=6,   # espacio entre el encabezado "Cátodos:" y la línea total
     )
   else:
     print("[REVISAR] CEN - Cátodos: no se encontró la línea 'Producción total de cátodos de Cu'.")
@@ -651,7 +659,7 @@ def ant_render_mina(doc, texto_compania, excel_madre=None):
     agregar_viñeta_plana(doc, texto, nivel=2, espacio_despues=6)
 
 # Procesa una sección genérica aplicando su extractor y renderizador.
-def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden_subtitulos, excel_madre=None):
+def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden_subtitulos, excel_madre=None, linea_vacia_antes=False):
     nivel_base = NIVEL_BASE_POR_SECCION.get(nombre_seccion, 2)
     overrides_seccion = NIVEL_POR_COMPANIA_SECCION_SUBTITULO.get(nombre_compania, {}).get(nombre_seccion, {})
 
@@ -677,6 +685,8 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
     if not contenido:
         return
 
+    if linea_vacia_antes:
+        agregar_linea_vacia(doc)
     agregar_texto(doc, f"{nombre_seccion}:", bold=True, color=(0x00, 0x77, 0x8B))
 
     if orden_subtitulos and orden_subtitulos[0] == "?":
@@ -1220,7 +1230,7 @@ def procesar_cen(doc, texto_compania, excel_madre):
     ],
     excel_madre
   )
-  procesar_seccion(doc, texto_compania, "CEN", "Sulfuros", [""], excel_madre)
+  procesar_seccion(doc, texto_compania, "CEN", "Sulfuros", [""], excel_madre, linea_vacia_antes=True)
   cen_render_catodos(doc, texto_compania, excel_madre)
   set_seccion_desviaciones(False)
 

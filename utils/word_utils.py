@@ -145,11 +145,11 @@ def agregar_viñeta_plana(doc, texto, nivel=1, espacio_despues=6):
   run.bold = False
 
 # Agrega al documento el elemento indicado por su nombre.
-def agregar_bullet_negro_manual(doc, texto, left_indent_cm=1.27, bullet_indent_cm=0.85, espacio_despues=6, bold=False):
+def agregar_bullet_negro_manual(doc, texto, left_indent_cm=1.27, bullet_indent_cm=0.85, espacio_despues=6, bold=False, espacio_antes=0):
   texto = limpiar_texto_global(texto)
   p = doc.add_paragraph(style="Normal AMSA")
   p.paragraph_format.line_spacing = 1.0
-  p.paragraph_format.space_before = Pt(0)
+  p.paragraph_format.space_before = Pt(espacio_antes)
   p.paragraph_format.space_after = Pt(espacio_despues)
   p.paragraph_format.left_indent = Cm(left_indent_cm)
   p.paragraph_format.first_line_indent = Cm(bullet_indent_cm - left_indent_cm)
@@ -287,6 +287,16 @@ def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None, nueva_pagina
         p.paragraph_format.page_break_before = True
 
 # Agrega al documento el elemento indicado por su nombre.
+def agregar_linea_vacia(doc):
+    """Agrega un párrafo vacío (una línea en blanco) para separar secciones.
+    Sobrevive a eliminar_paginas_blanco (no es un salto de página)."""
+    p = doc.add_paragraph(style="Normal AMSA")
+    p.paragraph_format.line_spacing = 1.0
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Pt(0)
+    return p
+
+# Agrega al documento el elemento indicado por su nombre.
 def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
     texto = limpiar_texto_global(texto)
     p = doc.add_paragraph(texto, style="Normal AMSA")
@@ -307,6 +317,10 @@ def agregar_viñeta(doc, texto, nivel=1, bold=False, color=None, underline=False
     if not texto:
         return
     texto = limpiar_texto_global(texto)
+    # Quitar marcador de viñeta manual al inicio (ej. "o " de "o\t7 cuasi...",
+    # "• ", "- ") para no duplicar la viñeta que ya aplica el estilo de párrafo.
+    # Solo "o"/guion seguidos de espacio (no rompe palabras como "oxidación").
+    texto = re.sub(r'^(?:[•○·‣▸▹►*​﻿]+\s*|[o\-–—]\s+)+', '', texto)
     if texto.startswith("Medición calidad de aire"):
         p = doc.add_paragraph(style="Normal AMSA")
     else:

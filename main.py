@@ -17,6 +17,7 @@ from core.renderers import *
 from utils.excel_utils import _obtener_excel_app, _rangos_tablas_sso_backup_dinamico
 from state import _workbooks_abiertos
 from core.validador import validar_kpis_vs_excel
+from utils.notas_pie import extraer_notas_al_pie, aplicar_notas_al_pie
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -135,6 +136,7 @@ def _construir_doc(
     incluir_gh=True,
     faenas_con_excel=None,           # None = todas; set/list = solo esas usan Excel para su imagen
     secciones_con_datos_previas=None, # claves que tenían datos reales en el Word previo
+    rutas_word=None,                  # dict clave→ruta del Word fuente (para traspasar notas al pie)
 ):
     """Construye y guarda el documento Word.  No hace preguntas ni resuelve rutas."""
     escribir_fechas_excel(excel_madre, dia_inicio, mes_inicio, dia_fin, mes_fin)
@@ -391,6 +393,17 @@ def _construir_doc(
     texto_pie = construir_texto_semana(dia_inicio, mes_inicio, dia_fin, mes_fin, year)
     agregar_pie_de_pagina(doc, texto_pie)
 
+    # Traspasar notas al pie de los Word fuente al informe final (si las hay).
+    if rutas_word:
+        notas = []
+        for clave, ruta in rutas_word.items():
+            if ruta and os.path.isfile(ruta):
+                notas.extend(extraer_notas_al_pie(ruta))
+        if notas:
+            n_ins = aplicar_notas_al_pie(doc, notas)
+            if n_ins:
+                print(f"  ✓ Notas al pie traspasadas desde el Word fuente: {n_ins}")
+
     eliminar_paginas_blanco(doc)
     ruta_guardado = os.path.join(carpeta_destino, f"{nombre_final}.docx")
     doc.save(ruta_guardado)
@@ -578,6 +591,7 @@ def actualizar_secciones_word(
         incluir_gh=incluir_gh,
         faenas_con_excel=set(faenas_actualizar),
         secciones_con_datos_previas=con_datos,
+        rutas_word=informes_paths,
     )
 
 
@@ -701,12 +715,14 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
         informes_dirs = None
 
     informes = {}
+    rutas_word = {}
     for clave in orden_oficial:
         if clave in faenas_activas:
             if MODO_DEBUG:
                 ruta = _resolver_unico_docx(rutas["informes_dirs"][clave], f"Informe {clave}")
             else:
                 ruta = seleccionar_archivo(f"Informe {clave}")
+            rutas_word[clave] = ruta
             informes[clave] = extraer_texto_word(ruta) if ruta else ""
 
     validar = input("\n¿Deseas validar KPIs Word vs Excel? (s/n): ").strip().lower()
@@ -717,6 +733,7 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
         carpeta_destino, nombre_final,
         incluir_sso=incluir_sso,
         incluir_gh=incluir_gh,
+        rutas_word=rutas_word,
     )
 
     if validar == "s":

@@ -161,8 +161,11 @@ CONFIG_CELDAS_DESVIACIONES = {
         # ── Mina ──────────────────────────────────────────────────────────────
         "Movimiento Mina":              ("D50", "F50", "G50"),
         "Extracción Mina":              ("D51", "F51", "G51"),
-        "Extracción Mineral":           ("D52", "F52", "G52"),
-        "Extracción Lastre":            ("D53", "F53", "G53"),
+        # Nota: "Extracción Mineral" (D52) y "Extracción Lastre" (D53) son la MISMA
+        # cifra que "Extracción de Mineral" (D56) y "Extracción de Lastre" (D62) —
+        # duplicados en el Excel. El Word siempre usa la forma "de Mineral/Lastre",
+        # así que se omiten aquí para que la verificación inversa no las marque como
+        # no revisadas (el matcher por solapamiento cubre igual la forma sin "de").
         "Remanejo":                     ("D54", "F54", "G54"),
         # ── Mina (Fases) — encabezados de sección ─────────────────────────────
         "Extracción de Mineral":        ("D56", "F56", "G56"),

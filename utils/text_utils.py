@@ -130,41 +130,45 @@ def normalizar_linea_ant(texto):
   original = re.sub(r"^[•○o·\-\s\u200b\ufeff]+", "", texto).strip()
   clave = normalizar_texto_clave(original)
 
+  # La clasificación usa startswith (la etiqueta del KPI está al inicio de la
+  # línea), NO subcadena: el cuerpo explicativo de una línea puede mencionar otra
+  # etiqueta (ej. la línea de "Extracción de Lastre" dice "...mayor extracción de
+  # mineral con Pala 6..."), y con `in` se clasificaría mal y se recortaría el texto.
   # --- Movimiento Mina ---
-  if "movimiento mina" in clave:
+  if clave.startswith("movimiento mina"):
     cuerpo = re.sub(r"(?i)^.*?movimiento mina[:\s-]*", "", original).strip(" :.-")
     return f"Movimiento Mina: {cuerpo}" if cuerpo else "Movimiento Mina:"
 
   # --- Extracción Mina ---
-  if "extraccion mina" in clave:
+  if clave.startswith("extraccion mina"):
     cuerpo = re.sub(r"(?i)^.*?extracci[oó]n mina[:\s-]*", "", original).strip(" :.-")
     return f"Extracción Mina: {cuerpo}" if cuerpo else "Extracción Mina:"
 
   # --- Extracción de Mineral (incluye mayor/menor) ---
-  if "extraccion de mineral" in clave or "extraccion mineral" in clave:
+  if clave.startswith("extraccion de mineral") or clave.startswith("extraccion mineral"):
     cuerpo = re.sub(r"(?i)^.*?extracci[oó]n(\s+de)?\s+mineral[:\s-]*", "", original).strip(" :.-")
     return f"Extracción de Mineral: {cuerpo}" if cuerpo else "Extracción de Mineral:"
 
-  if "mayor extraccion de mineral" in clave or "menor extraccion de mineral" in clave:
+  if clave.startswith("mayor extraccion de mineral") or clave.startswith("menor extraccion de mineral"):
     cuerpo = re.sub(r"(?i)^.*?extracci[oó]n\s+de\s+mineral[:\s-]*", "", original).strip(" :.-")
     return f"Extracción de Mineral: {cuerpo}" if cuerpo else "Extracción de Mineral:"
 
   # --- Extracción de lastre (incluye mayor/menor) ---
-  if "extraccion de lastre" in clave or "extraccion lastre" in clave:
+  if clave.startswith("extraccion de lastre") or clave.startswith("extraccion lastre"):
     cuerpo = re.sub(r"(?i)^.*?extracci[oó]n(\s+de)?\s+lastre[:\s-]*", "", original).strip(" :.-")
     return f"Extracción de lastre: {cuerpo}" if cuerpo else "Extracción de lastre:"
 
-  if "mayor extraccion de lastre" in clave or "menor extraccion de lastre" in clave:
+  if clave.startswith("mayor extraccion de lastre") or clave.startswith("menor extraccion de lastre"):
     cuerpo = re.sub(r"(?i)^.*?extracci[oó]n\s+de\s+lastre[:\s-]*", "", original).strip(" :.-")
     return f"Extracción de lastre: {cuerpo}" if cuerpo else "Extracción de lastre:"
 
   # --- 🔥 Extracción a desarrollo (CLAVE) ---
-  if "extraccion a desarrollo" in clave:
+  if clave.startswith("extraccion a desarrollo"):
     cuerpo = re.sub(r"(?i)^.*?extracci[oó]n a desarrollo[:\s-]*", "", original).strip(" :.-")
     return f"Extracción a desarrollo: {cuerpo}" if cuerpo else "Extracción a desarrollo:"
 
   # --- Remanejo ---
-  if "remanejo" in clave:
+  if clave.startswith("remanejo"):
     cuerpo = re.sub(r"(?i)^.*?remanejo[:\s-]*", "", original).strip(" :.-")
     return f"Remanejo: {cuerpo}" if cuerpo else "Remanejo:"
 
@@ -403,6 +407,10 @@ def limpiar_texto_global(texto):
         print(f"[REVISAR] {_msg}")
         print(f"          → {texto[:80].strip()}")
         errores.append(_msg)
+  # Un valor exactamente cero no lleva signo: "(+0.0%)" / "(-0.0%)" → "(0.0%)".
+  # Aplica en todo el documento (no solo Principales Desviaciones).
+  texto = re.sub(r'(?<![\d.,])[+\-‑](0+(?:[.,]0+)?)(?![\d.,])', r'\1', texto)
+
   # NBSP antes del '-' (evita corte de línea); elimina espacio visible entre '-' y dígito.
   texto = re.sub(r'([ (])-\s*(\d)', lambda m: (' ' if m.group(1)==' ' else m.group(1)) + '‑' + m.group(2), texto)
 
