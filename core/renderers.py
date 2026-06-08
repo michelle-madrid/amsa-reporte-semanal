@@ -1586,8 +1586,12 @@ def fcab_render_camion(doc, texto_compania, excel_madre=None):
   for linea in detalles_reales:
     agregar_circulo_blanco_manual(doc, linea, espacio_despues=6)
 
-  for linea in acumulados:
-    agregar_parrafo_fcab_alineado(doc, linea, bold=False, espacio_antes=True)
+  if acumulados:
+    doc.add_paragraph("")   # una sola línea en blanco antes del bloque de acumulados
+    for linea in acumulados:
+      # espacio_antes=False: NO insertar línea en blanco entre acumulados (evita el
+      # doble interlineado); basta el espaciado normal (6 pt) de cada párrafo.
+      agregar_parrafo_fcab_alineado(doc, linea, bold=False, espacio_antes=False)
 
   for linea in otros:
     print(f"[WARNING] FCAB - Camión: línea no clasificada -> '{linea}'")

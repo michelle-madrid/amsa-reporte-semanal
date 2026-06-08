@@ -260,12 +260,28 @@ def agregar_nota_sin_viñeta(doc, texto):
     run.font.size = Pt(11)
 
 # Agrega al documento el elemento indicado por su nombre.
+def _ultimo_parrafo_es_acumulado(doc):
+  """True si el último párrafo con texto es una línea de acumulado/respecto del plan."""
+  for p in reversed(doc.paragraphs):
+    t = p.text.strip().lower()
+    if not t:
+      continue
+    return t.startswith("acumulado") or t.startswith("respecto del plan")
+  return False
+
 def agregar_linea_acumulado(doc, texto):
   texto = texto.rstrip()
   if texto and texto[-1] not in (".", ":"):
     texto = texto + "."
-  doc.add_paragraph("")
-  agregar_texto(doc, texto)
+  # Línea en blanco SOLO antes del primer acumulado (lo separa del contenido).
+  # Entre acumulados consecutivos basta un espaciado normal (6 pt), para no
+  # generar el doble interlineado que producía un párrafo vacío entre cada uno.
+  consecutivo = _ultimo_parrafo_es_acumulado(doc)
+  if not consecutivo:
+    agregar_linea_vacia(doc)
+  p = agregar_texto(doc, texto)
+  if consecutivo and p is not None:
+    p.paragraph_format.space_before = Pt(6)
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_titulo(doc, texto, nivel=1, centrado=False, color=None, nueva_pagina=False):
@@ -310,6 +326,7 @@ def agregar_texto(doc, texto, bold=False, color=None, justificar=True):
             run.bold = True
         if color:
             run.font.color.rgb = RGBColor(*color)
+    return p
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_viñeta(doc, texto, nivel=1, bold=False, color=None, underline=False, espacio_despues=0):
