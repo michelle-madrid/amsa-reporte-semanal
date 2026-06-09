@@ -218,7 +218,12 @@ def _validar_clasificacion_acumulados(lineas_acum, clave):
 
 
 # Valida que existan las líneas de acumulado mensual y anual en las principales desviaciones.
-def validar_acumulados_principales_desviaciones(texto_compania, clave, es_seleccionada=True):
+def validar_acumulados_principales_desviaciones(texto_compania, clave, acumulados_desde_excel=False):
+  # Cuando hay Excel madre las líneas 'Acumulado al mes/año' se reemplazan por las
+  # celdas del Excel al renderizar (MLP C58:C59, CEN OXE B139:B140, ANT B76:B77,
+  # CMZ B62:B63). En ese caso el texto del Word fuente se descarta, así que validar
+  # su presencia o su coherencia cualitativa no aporta — solo genera ruido. Estas
+  # validaciones de acumulados solo aplican cuando el texto del Word es el que queda.
   extractores_por_compania = {
     "MLP": [
       extraer_mina,
@@ -266,11 +271,11 @@ def validar_acumulados_principales_desviaciones(texto_compania, clave, es_selecc
   tiene_acum_mes = any("acumulado al mes" in l for l in lineas_limpias)
   tiene_acum_anio = any("acumulado al año" in l for l in lineas_limpias)
 
-  if not tiene_acum_mes and es_seleccionada:
+  if not tiene_acum_mes and not acumulados_desde_excel:
     print(f"[REVISAR] {clave} - Principales Desviaciones: no viene 'Acumulado al mes'")
     errores.append(f"{clave} - Principales Desviaciones: falta 'Acumulado al mes'")
 
-  if not tiene_acum_anio and es_seleccionada:
+  if not tiene_acum_anio and not acumulados_desde_excel:
     print(f"[REVISAR] {clave} - Principales Desviaciones: no viene 'Acumulado al año'")
     errores.append(f"{clave} - Principales Desviaciones: falta 'Acumulado al año'")
 
@@ -342,7 +347,7 @@ def validar_acumulados_principales_desviaciones(texto_compania, clave, es_selecc
       if "acumulado al mes" in normalizar_texto_clave(_limpiar(l))
       or "acumulado al ano" in normalizar_texto_clave(_limpiar(l))
   ]
-  if lineas_acum:
+  if lineas_acum and not acumulados_desde_excel:
       _validar_clasificacion_acumulados(lineas_acum, clave)
 
 # Renderiza contenido específico dentro del documento Word.
@@ -1167,7 +1172,7 @@ def procesar_mlp(doc, texto_compania, excel_madre):
     doc.add_paragraph()
     set_seccion_desviaciones(True)
     agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-    validar_acumulados_principales_desviaciones(texto_compania, "MLP", es_seleccionada=excel_madre is not None)
+    validar_acumulados_principales_desviaciones(texto_compania, "MLP", acumulados_desde_excel=excel_madre is not None)
     orden = ORDEN_PRINCIPALES_DESVIACIONES["MLP"]
     for nombre_seccion, orden_subtitulos in orden.items():
         if nombre_seccion == "Mina":
@@ -1190,7 +1195,7 @@ def _procesar_faena_generica(doc, texto_compania, excel_madre, clave):
     doc.add_paragraph("") 
     set_seccion_desviaciones(True)
     agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-    validar_acumulados_principales_desviaciones(texto_compania, clave, es_seleccionada=excel_madre is not None)
+    validar_acumulados_principales_desviaciones(texto_compania, clave, acumulados_desde_excel=excel_madre is not None)
     orden = ORDEN_PRINCIPALES_DESVIACIONES.get(clave, {})
     for nombre_seccion, orden_subtitulos in orden.items():
         procesar_seccion(doc, texto_compania, clave, nombre_seccion, orden_subtitulos, excel_madre)
@@ -1214,7 +1219,7 @@ def procesar_cen(doc, texto_compania, excel_madre):
   agregar_produccion_semana_faena(doc, "CEN", excel_madre)
   set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2, nueva_pagina=True)
-  validar_acumulados_principales_desviaciones(texto_compania, "CEN", es_seleccionada=excel_madre is not None)
+  validar_acumulados_principales_desviaciones(texto_compania, "CEN", acumulados_desde_excel=excel_madre is not None)
   procesar_seccion(
     doc,
     texto_compania,
@@ -1386,7 +1391,7 @@ def procesar_cmz(doc, texto_compania, excel_madre):
   doc.add_paragraph("")
   set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-  validar_acumulados_principales_desviaciones(texto_compania, "CMZ", es_seleccionada=excel_madre is not None)
+  validar_acumulados_principales_desviaciones(texto_compania, "CMZ", acumulados_desde_excel=excel_madre is not None)
   cmz_render_mina(doc, texto_compania, excel_madre)
   cmz_render_planta(doc, texto_compania, excel_madre)
   set_seccion_desviaciones(False)
@@ -1607,7 +1612,7 @@ def procesar_fcab(doc, texto_compania, excel_madre):
 
   set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
-  validar_acumulados_principales_desviaciones(texto_compania, "FCAB", es_seleccionada=excel_madre is not None)
+  validar_acumulados_principales_desviaciones(texto_compania, "FCAB", acumulados_desde_excel=excel_madre is not None)
   fcab_render_tren(doc, texto_compania, excel_madre)
   fcab_render_camion(doc, texto_compania, excel_madre)
   set_seccion_desviaciones(False)
