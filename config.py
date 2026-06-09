@@ -345,6 +345,11 @@ CONFIG_KPI_REQUERIDOS = {
 # Aplica a cualquier compañía. Normalizado sin tildes/minúsculas al usar.
 CONFIG_KPI_SOLO_DESVIACION = {"Recuperación Cu", "Recuperacion Cu"}
 
+# La desviación en UNIDADES se compara redondeando ambos lados a ENTERO por
+# defecto. Los KPIs listados aquí son la excepción: se comparan con 1 decimal.
+# Comparación por igualdad exacta del valor normalizado (sin tildes, minúsculas).
+CONFIG_KPI_UNID_1_DECIMAL = {"au fino pagable filtrado", "pls"}
+
 # Después de validar este KPI (normalizado), detener la validación para esa compañía.
 # Usado para compañías que tienen texto libre después de los KPIs formales (ej. MLP Planta Desaladora).
 CONFIG_KPI_FIN_VALIDACION = {

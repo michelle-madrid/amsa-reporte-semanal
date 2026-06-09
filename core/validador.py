@@ -4,7 +4,7 @@ import re
 import time
 
 import state
-from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS, CONFIG_KPI_FIN_VALIDACION, CONFIG_CONTEXTO_POR_LABEL
+from config import CONFIG_COMPANIAS, CONFIG_HOJAS_ADICIONALES, CONFIG_CELDAS_DESVIACIONES, CONFIG_KPI_EXCLUIDOS, CONFIG_KPI_PREFIJOS_EXCLUIDOS, CONFIG_SUBSECCIONES_CONTEXTO, CONFIG_KPI_SOLO_DESVIACION, CONFIG_KPI_REQUERIDOS, CONFIG_KPI_FIN_VALIDACION, CONFIG_CONTEXTO_POR_LABEL, CONFIG_KPI_UNID_1_DECIMAL
 
 # ── Resultado estructurado (para panel HTML) ──────────────────────────────────
 _resultados: list = []
@@ -90,6 +90,27 @@ def set_tolerancia_base(val: float):
 def _tol_para(raw_str):
     """Tolerancia plana: la diferencia absoluta permitida es directamente _tolerancia_base."""
     return _tolerancia_base
+
+
+def _fmt_dec(valor, dec):
+    """Formatea el valor mostrado del Excel con 'dec' decimales fijos, como string.
+    Se devuelve string (no float) para que el panel no descarte el '.0' final
+    al renderizar (JS muestra -100.0 como -100). dec=0 → entero sin decimales."""
+    if valor is None:
+        return None
+    if dec <= 0:
+        return str(int(round(valor)))
+    return f"{valor:.{dec}f}"
+
+
+def _decimales_unidad(label_norm, excel_label):
+    """Decimales con los que se compara la desviación en UNIDADES.
+    Por defecto 0 (se redondea a entero); 1 para los KPIs configurados como excepción
+    (ej. 'Au Fino Pagable Filtrado', 'PLS'). Se evalúa el label del Word y el del Excel."""
+    candidatos = {label_norm}
+    if excel_label:
+        candidatos.add(_norm(excel_label))
+    return 1 if (candidatos & CONFIG_KPI_UNID_1_DECIMAL) else 0
 
 
 def _encontrar_en_fila(v_abs, nums_fila, tol=None, signed_val=None):
@@ -833,37 +854,53 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
                 # Se compara en valor absoluto: el signo lo da el texto cualitativo
                 # ("mayor/menor producción"), no los números en sí.
                 for i, (raw, v_abs_w) in enumerate(numeros):
-                    tol = _tol_para(raw)
+                    # Acumulados: solo se compara la desviación % → 1 decimal.
+                    dif = None
                     if i < len(nums_fila):
                         v_abs_e = abs(nums_fila[i])
-                        ok = abs(v_abs_w - v_abs_e) <= tol
-                        cercano = round(nums_fila[i], 4)
+                        ok = (round(v_abs_w, 1) == round(v_abs_e, 1))
+                        dif = round(abs(v_abs_w - v_abs_e), 4) if not ok else None
+                        excel_disp = _fmt_dec(nums_fila[i], 1)
                     else:
                         ok = False
-                        cercano = None
+                        excel_disp = None
                     marca = "✓" if ok else "✗"
-                    dif = round(abs(v_abs_w - abs(cercano)), 4) if not ok and cercano is not None else None
                     if ok:
-                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}")
+                        print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}")
                     else:
-                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}  (dif: {dif})")
+                        print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}  (dif: {dif})")
                         n_warn += 1
                         kpi["estado"] = "revisar"
-                    kpi["valores"].append({"word": raw, "excel": cercano, "ok": ok, "dif": dif})
+                    kpi["valores"].append({"word": raw, "excel": excel_disp, "ok": ok, "dif": dif})
             else:
-                for raw, v_abs in numeros:
+                total_nums = len(numeros)
+                for i, (raw, v_abs) in enumerate(numeros):
                     tol = _tol_para(raw)
                     ok, cercano = _encontrar_en_fila(v_abs, nums_fila, tol=tol)
+                    # Comparación por redondeo (reemplaza la tolerancia plana):
+                    #  - UNIDADES (primer valor cuando hay UNID + %): a entero,
+                    #    salvo los KPIs configurados a 1 decimal.
+                    #  - DESVIACIÓN %: siempre a 1 decimal.
+                    dif_val = None
+                    excel_disp = cercano
+                    if cercano is not None:
+                        es_unid = (total_nums == 2 and i == 0)
+                        dec = _decimales_unidad(label_norm, excel_label) if es_unid else 1
+                        ok = (round(v_abs, dec) == round(abs(cercano), dec))
+                        dif_val = round(abs(v_abs - abs(cercano)), 4) if not ok else None
+                        # Mostrar con los decimales fijos: el % siempre con 1 decimal
+                        # (ej. -100.0), las unidades como entero. Se formatea como string
+                        # para que el panel no descarte el ".0" final.
+                        excel_disp = _fmt_dec(cercano, dec)
                     marca = "✓" if ok else "✗"
                     if ok:
-                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}")
+                        print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}")
                     else:
-                        print(f"      {raw:>14}  →  {marca}  Excel = {cercano}  (dif: {abs(v_abs - cercano):.4f})")
+                        print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}  (dif: {dif_val})")
                         n_warn += 1
                         kpi["estado"] = "revisar"
                     kpi["valores"].append({
-                        "word": raw, "excel": cercano, "ok": ok,
-                        "dif": round(abs(v_abs - abs(cercano)), 4) if not ok and cercano is not None else None,
+                        "word": raw, "excel": excel_disp, "ok": ok, "dif": dif_val,
                     })
 
             # Validar indicador de estado (bajo PM / sobre PM / en línea)

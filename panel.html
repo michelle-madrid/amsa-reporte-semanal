@@ -648,6 +648,10 @@
           <button class="btn-browse" id="btnBrowseRaiz"
                   onclick="browseFolder('pathRaiz')" style="display:none;">📂 Buscar</button>
         </div>
+        <!-- Aviso modo "No disco": faltan fechas o carpeta sin la estructura esperada -->
+        <div id="aviso_no_disco" style="display:none; margin-top:10px; padding:8px 12px;
+             background:#FFF8E6; border:1.5px solid var(--amber); border-radius:6px;
+             font-size:12px; color:#7A4F00; line-height:1.5;"></div>
       </div>
     </div>
 
@@ -1325,6 +1329,7 @@ function onDiscoChange() {
   const nombreRow = document.getElementById('discoNombreRow');
   const btnBrowse = document.getElementById('btnBrowseRaiz');
 
+  setAvisoNoDisco('');
   if (modo === 'si') {
     if (nombreRow) nombreRow.style.display = 'flex';
     if (btnBrowse) btnBrowse.style.display = 'none';
@@ -1537,17 +1542,32 @@ async function browseFolder(inputId) {
   }
 }
 
+function setAvisoNoDisco(html) {
+  const el = document.getElementById('aviso_no_disco');
+  if (!el) return;
+  if (html) { el.innerHTML = html; el.style.display = ''; }
+  else      { el.innerHTML = '';   el.style.display = 'none'; }
+}
+
 function syncDestino() {
   const raiz  = document.getElementById('pathRaiz').value.trim();
   const gDest = document.getElementById('g_destino');
   if (gDest) gDest.value = raiz;
 
-  // Cuando el modo es "No disco compartido" y hay una ruta elegida,
-  // pedir al servidor que detecte todos los archivos dentro de esa carpeta
-  if (getDiscoMode() === 'no' && raiz) {
-    clearTimeout(semanaTimer);
-    semanaTimer = setTimeout(() => fetchSemanaInfoConRaiz(raiz), 400);
+  if (getDiscoMode() !== 'no') { setAvisoNoDisco(''); return; }
+  if (!raiz) { setAvisoNoDisco(''); return; }
+
+  // En modo "No disco" la detección sólo corre si TODAS las fechas están completas.
+  // Antes esto fallaba en silencio: avisar explícitamente.
+  if (!getSemanaData()) {
+    setAvisoNoDisco('⚠ Completa primero <strong>todos</strong> los campos de la semana ' +
+      '(n.º semana, día/mes inicio, día/mes fin, año) para detectar los archivos de esta carpeta.');
+    return;
   }
+  // Cuando el modo es "No disco compartido" y hay ruta + fechas, pedir al
+  // servidor que detecte todos los archivos dentro de esa carpeta.
+  clearTimeout(semanaTimer);
+  semanaTimer = setTimeout(() => fetchSemanaInfoConRaiz(raiz), 400);
 }
 
 async function fetchSemanaInfoConRaiz(raiz) {
@@ -1560,7 +1580,24 @@ async function fetchSemanaInfoConRaiz(raiz) {
       body: JSON.stringify(data)
     });
     const j = await r.json();
-    if (j.error) return;
+    if (j.error) { setAvisoNoDisco('⚠ ' + j.error); return; }
+
+    // ¿Se detectó algo dentro de la carpeta? Si no, probablemente se eligió una
+    // carpeta de nivel superior en vez de la carpeta de la semana.
+    const excelsFaena = j.excels_faena || {};
+    const informesFaena = j.informes || {};
+    const algoDetectado = j.excel_madre_ok || !!j.excel_madre_candidato ||
+      j.excel_indicadores_ok ||
+      Object.values(excelsFaena).some(v => !!v) ||
+      Object.values(informesFaena).some(v => !!v);
+    if (!algoDetectado) {
+      setAvisoNoDisco('⚠ No se encontró ningún archivo en esta carpeta. ' +
+        'Selecciona la carpeta <strong>de la semana</strong> (la que contiene ' +
+        '<code>01 -MLP</code>, …, <code>06 -SSO</code> y <code>Semana N - …xlsx</code>), ' +
+        'no una carpeta superior.');
+    } else {
+      setAvisoNoDisco('');
+    }
 
     fillInput('g_excel_madre', j.excel_madre,        j.excel_madre_ok);
     fillInput('g_excel_ind',   j.excel_indicadores,   j.excel_indicadores_ok);

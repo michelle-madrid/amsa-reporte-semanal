@@ -612,6 +612,71 @@ def _cerrar_wb_por_nombre(excel_app, ruta_objetivo, limpiar_cache=False):
         pass
 
 
+def _buscar_archivo_eventos_seguridad(carpeta, carpeta_fallback=None):
+    """Localiza el archivo fuente 'eventos seguridad*.xlsx' en la carpeta 06 -SSO.
+    No abre selector: si no lo encuentra (ni en la semana anterior) devuelve None."""
+    patron = _PATRON_EXCEL_FAENA.get("SSO", "eventos seguridad")
+    for base in (carpeta, carpeta_fallback):
+        if base and os.path.isdir(str(base)):
+            candidatos = [
+                f for f in os.listdir(str(base))
+                if f.lower().endswith(".xlsx")
+                and not f.startswith("~$")
+                and patron in f.lower()
+            ]
+            if len(candidatos) == 1:
+                return os.path.join(str(base), candidatos[0])
+    return None
+
+
+def _ordenar_archivo_eventos_seguridad(ruta):
+    """Ordena el archivo fuente de eventos de seguridad por la columna B (Fecha Evento)
+    de forma ascendente y permanente. Es el paso previo a actualizar el Excel madre:
+    al ordenar el origen, el refresco de vínculos trae los datos ya ordenados.
+    Reutiliza el Excel del usuario si el archivo ya está abierto; si no, usa DispatchEx."""
+    wb, excel_usuario = _buscar_wb_en_excel_usuario(ruta)
+    abierto_por_usuario = wb is not None
+    excel = None
+    try:
+        if wb is None:
+            excel = _obtener_excel_app()
+            wb = excel.Workbooks.Open(ruta, UpdateLinks=0)
+
+        ws = wb.Worksheets(1)  # el archivo fuente tiene una única hoja de datos
+        used = ws.UsedRange
+        first_row = used.Row
+        first_col = used.Column
+        last_row = first_row + used.Rows.Count - 1
+        last_col = first_col + used.Columns.Count - 1
+
+        # Localizar la columna 'Fecha Evento' en la fila de encabezado;
+        # si no se reconoce por nombre, usar la columna B (la 2.ª).
+        col_fecha = None
+        for c in range(first_col, last_col + 1):
+            v = ws.Cells(first_row, c).Value
+            if v and "fecha" in str(v).strip().lower():
+                col_fecha = c
+                break
+        if col_fecha is None:
+            col_fecha = 2
+
+        # Ordenar solo las filas de datos (excluyendo la fila de encabezado del rango)
+        # para que Excel no arrastre el encabezado al ordenar.
+        primera_fila_datos = first_row + 1
+        if last_row >= primera_fila_datos:
+            rango = ws.Range(ws.Cells(primera_fila_datos, first_col), ws.Cells(last_row, last_col))
+            rango.Sort(Key1=ws.Cells(primera_fila_datos, col_fecha), Order1=1, Header=2, Orientation=1)
+
+        wb.Save()
+        if not abierto_por_usuario:
+            wb.Close(True)
+        print(f"  ✓ Archivo fuente ordenado por Fecha Evento: {os.path.basename(ruta)}")
+    except Exception as e:
+        msg = f"[REVISAR] No se pudo ordenar el archivo fuente de eventos de seguridad: {e}"
+        state.errores.append(msg)
+        print(f"  ! {msg}")
+
+
 def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino=None, carpeta_raiz=None, ordenar_sso=False, guardar_en_lugar=False, informes_dirs_fallback=None, faenas_seleccionadas=None):
     """
     Actualiza vínculos del Excel madre.
@@ -625,6 +690,20 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
         else:
             nombre_base = os.path.splitext(os.path.basename(ruta_excel))[0]
             ruta_act = os.path.join(carpeta_destino, f"{nombre_base}_act.xlsx") if carpeta_destino else None
+
+        # ── Paso previo: ordenar el archivo fuente de eventos de seguridad por
+        # Fecha Evento (columna B) ANTES de actualizar los vínculos del Excel madre,
+        # para que el refresco traiga los datos ya ordenados. ─────────────────────
+        if ordenar_sso and informes_dirs:
+            print("\nOrdenando archivo fuente de eventos de seguridad por fecha (paso previo)...")
+            ruta_eventos = _buscar_archivo_eventos_seguridad(
+                informes_dirs.get("SSO"),
+                (informes_dirs_fallback or {}).get("SSO"),
+            )
+            if ruta_eventos:
+                _ordenar_archivo_eventos_seguridad(ruta_eventos)
+            else:
+                print("  ! No se encontró 'eventos seguridad*.xlsx' para ordenar (paso omitido).")
 
         # Intentar primero con el Excel del usuario (evita problemas de read-only).
         # Hacerlo ANTES de _obtener_excel_app() para que Dispatch encuentre
