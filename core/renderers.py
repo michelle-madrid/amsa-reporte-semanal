@@ -416,11 +416,18 @@ def render_accidentabilidad_generica(doc, lineas):
     p.paragraph_format.line_spacing = 1.0
     p.paragraph_format.space_before = Pt(0)
     p.paragraph_format.space_after = Pt(6)
-    run_f = p.add_run(f"{pendiente['fecha']}: ")
+    # Tras la fecha NO va ":". Si el texto ya trae su propia puntuación
+    # (".", ",", ";"), se respeta; si no, se separa con ". ".
+    texto = pendiente['texto']
+    if texto[:1] in ".,;:":
+      fecha_txt = pendiente['fecha']
+    else:
+      fecha_txt = f"{pendiente['fecha']}. "
+    run_f = p.add_run(fecha_txt)
     run_f.bold = True
     run_f.font.name = "Arial"
     run_f.font.size = Pt(11)
-    run_t = p.add_run(pendiente['texto'])
+    run_t = p.add_run(texto)
     run_t.bold = False
     run_t.font.name = "Arial"
     run_t.font.size = Pt(11)

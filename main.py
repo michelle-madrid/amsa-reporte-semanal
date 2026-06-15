@@ -483,6 +483,7 @@ def actualizar_secciones_word(
     incluir_sso=True,
     incluir_gh=True,
     disco=None,
+    carpeta_personalizada=None, # raíz propia del usuario (None → se usa el disco N:)
     hoja_indicadores=None,      # nombre de la hoja SSO (None → HOJA_INDICADORES_SSO)
 ):
     """
@@ -566,7 +567,8 @@ def actualizar_secciones_word(
 
     # ── Actualizar vínculos Excel — TODAS las faenas + SSO + GH ──────────
     if actualizar_vinculos:
-        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year, disco=disco)
+        rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year,
+                                       disco=disco, carpeta_personalizada=carpeta_personalizada)
         # Empezar con los dirs de las 5 faenas
         dirs_vinculos = dict(rutas["informes_dirs"])
         # Incluir siempre SSO y Gestión Hídrica para actualizar sus vínculos
