@@ -445,7 +445,11 @@ def render_accidentabilidad_generica(doc, lineas):
       if re.match(r"^Nota\s*:", limpia, re.IGNORECASE):
         agregar_nota_sin_viñeta(doc, limpia)
       else:
-        agregar_viñeta(doc, limpia, nivel=2, espacio_despues=6)
+        # Líneas de presencia/ausencia de accidentes (ej. "1 accidente Sin
+        # Tiempo Perdido (ASTP):"). Aunque terminen en ":", NO deben ir en
+        # negrita: en accidentabilidad solo la fecha del detalle va en negrita
+        # (se maneja en _flush). agregar_viñeta pondría la cabecera en negrita.
+        agregar_viñeta_sin_negrita(doc, limpia, nivel=2, espacio_despues=6)
 
   _flush()
 

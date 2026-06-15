@@ -137,6 +137,7 @@ def _construir_doc(
     faenas_con_excel=None,           # None = todas; set/list = solo esas usan Excel para su imagen
     secciones_con_datos_previas=None, # claves que tenían datos reales en el Word previo
     rutas_word=None,                  # dict clave→ruta del Word fuente (para traspasar notas al pie)
+    hoja_indicadores=None,            # nombre de la hoja SSO (None → HOJA_INDICADORES_SSO)
 ):
     """Construye y guarda el documento Word.  No hace preguntas ni resuelve rutas."""
     escribir_fechas_excel(excel_madre, dia_inicio, mes_inicio, dia_fin, mes_fin)
@@ -245,9 +246,16 @@ def _construir_doc(
 
     agregar_titulo(doc, "Accidentabilidad", nivel=2, nueva_pagina=True)
     if incluir_sso:
-        img_semanal = exportar_imagen_excel(excel_indicadores, "Informe Viernes", "A29:M41", "valor_semanal.png")
-        img_mensual = exportar_imagen_excel(excel_indicadores, "Informe Viernes", "A15:M27", "valor_mensual.png")
-        img_anual   = exportar_imagen_excel(excel_indicadores, "Informe Viernes", "A1:M13",  "valor_anual.png")
+        # Resolver la hoja de indicadores SSO una sola vez: nombre del panel
+        # (o el default de config), con auto-fallback a la única hoja del libro.
+        nombre_hoja_pref = hoja_indicadores or HOJA_INDICADORES_SSO
+        hoja_sso = resolver_hoja_indicadores(excel_indicadores, nombre_hoja_pref)
+        if hoja_sso:
+            img_semanal = exportar_imagen_excel(excel_indicadores, hoja_sso, "A29:M41", "valor_semanal.png")
+            img_mensual = exportar_imagen_excel(excel_indicadores, hoja_sso, "A15:M27", "valor_mensual.png")
+            img_anual   = exportar_imagen_excel(excel_indicadores, hoja_sso, "A1:M13",  "valor_anual.png")
+        else:
+            img_semanal = img_mensual = img_anual = None
         for img_path, texto_titulo in [
             (img_semanal, "Indicadores Valor Semanal"),
             (img_mensual, "Indicadores Valor Mensual"),
@@ -260,7 +268,17 @@ def _construir_doc(
             run.font.name = "Arial"
             run.font.size = Pt(11)
             doc.add_paragraph()
-            agregar_imagen(doc, img_path, 19, 4.3)
+            if img_path:
+                agregar_imagen(doc, img_path, 19, 4.3)
+            else:
+                # Exportación fallida: marcador visible en vez de imagen vieja.
+                p_ph = doc.add_paragraph()
+                p_ph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+                r_ph = p_ph.add_run(f"⚠ No se pudo generar la imagen de «{texto_titulo}» — revisar hoja de indicadores SSO")
+                r_ph.bold = True
+                r_ph.font.name = "Arial"
+                r_ph.font.size = Pt(11)
+                r_ph.font.color.rgb = RGBColor(0xC0, 0x00, 0x00)
             doc.add_paragraph()
     elif es_parcial:
         # Modo Word existente sin SSO seleccionada: restaurar imágenes del Word previo
@@ -465,6 +483,7 @@ def actualizar_secciones_word(
     incluir_sso=True,
     incluir_gh=True,
     disco=None,
+    hoja_indicadores=None,      # nombre de la hoja SSO (None → HOJA_INDICADORES_SSO)
 ):
     """
     Carga un Word existente y regenera solo las secciones de las faenas indicadas.
@@ -592,6 +611,7 @@ def actualizar_secciones_word(
         faenas_con_excel=set(faenas_actualizar),
         secciones_con_datos_previas=con_datos,
         rutas_word=informes_paths,
+        hoja_indicadores=hoja_indicadores,
     )
 
 
@@ -599,7 +619,8 @@ def actualizar_secciones_word(
 # Generar informe semanal completo a partir de los archivos de entrada.
 # ─────────────────────────────────────────────────────────────────────────────
 def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
-                    disco=None, carpeta_personalizada=None):
+                    disco=None, carpeta_personalizada=None, hoja_indicadores=None,
+                    excel_madre_override=None, excel_indicadores_override=None):
     def pedir_entero(mensaje, minimo, maximo):
         while True:
             valor = input(mensaje).strip()
@@ -627,8 +648,11 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
     else:
         faenas_activas = orden_oficial
 
-    def _resolver_archivo(ruta_esperada, mensaje):
-        """Usa la ruta construida si existe; si no, abre selector."""
+    def _resolver_archivo(ruta_esperada, mensaje, override=None):
+        """Prioridad: ruta indicada en el panel (override) > ruta construida > selector."""
+        if override and Path(override).is_file():
+            print(f"  ✓ (ruta del panel) {mensaje}: {Path(override).name}")
+            return str(override)
         if ruta_esperada and Path(ruta_esperada).is_file():
             print(f"  ✓ {mensaje}: {ruta_esperada.name}")
             return str(ruta_esperada)
@@ -649,8 +673,12 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
             print(f"  ! {mensaje}: carpeta no encontrada → abriendo selector")
         return seleccionar_archivo(mensaje)
 
-    def _resolver_unico_xlsx(carpeta, mensaje):
-        """Busca un .xlsx que empiece con 'BDatos' en la carpeta; si no abre selector."""
+    def _resolver_unico_xlsx(carpeta, mensaje, override=None):
+        """Busca un .xlsx que empiece con 'BDatos' en la carpeta; si no abre selector.
+        Si el panel indicó una ruta (override), esa tiene prioridad."""
+        if override and Path(override).is_file():
+            print(f"  ✓ (ruta del panel) {mensaje}: {Path(override).name}")
+            return str(override)
         carpeta = Path(carpeta)
         if carpeta.is_dir():
             candidatos = [f for f in carpeta.glob("BDatos*.xlsx") if not f.name.startswith("~$")]
@@ -668,8 +696,8 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
     if MODO_DEBUG:
         rutas = construir_rutas_semana(num_semana, dia_inicio, mes_inicio, dia_fin, mes_fin, year,
                                        disco=disco, carpeta_personalizada=carpeta_personalizada)
-        excel_madre       = _resolver_archivo(rutas["excel_madre"], "Excel Base")
-        excel_indicadores = _resolver_unico_xlsx(rutas["excel_indicadores_dir"], "Excel de indicadores SSO") if incluir_sso else ""
+        excel_madre       = _resolver_archivo(rutas["excel_madre"], "Excel Base", override=excel_madre_override)
+        excel_indicadores = _resolver_unico_xlsx(rutas["excel_indicadores_dir"], "Excel de indicadores SSO", override=excel_indicadores_override) if incluir_sso else ""
         carpeta_destino   = rutas["carpeta_destino"] if Path(rutas["carpeta_destino"]).is_dir() else seleccionar_carpeta()
         nombre_final      = nombre_override or rutas["nombre_archivo"]
     else:
@@ -734,6 +762,7 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
         incluir_sso=incluir_sso,
         incluir_gh=incluir_gh,
         rutas_word=rutas_word,
+        hoja_indicadores=hoja_indicadores,
     )
 
     if validar == "s":

@@ -109,6 +109,54 @@ def cerrar_excels():
         state._workbooks_abiertos = {}
 
 # Exporta un rango de Excel como imagen.
+def _nombres_hojas(wb):
+    """Lista de nombres de hoja del workbook COM (compatible con DispatchEx)."""
+    return [wb.Worksheets(i).Name for i in range(1, wb.Worksheets.Count + 1)]
+
+
+def resolver_hoja_indicadores(ruta_excel, nombre_preferido):
+    """Resuelve el nombre real de la hoja de indicadores SSO dentro del libro.
+
+    - Coincidencia con `nombre_preferido` (ignorando mayúsculas/espacios) → la usa.
+    - Si no coincide pero el libro tiene UNA sola hoja → usa esa (con aviso).
+    - Si no se puede resolver → registra un error EXPLÍCITO listando las hojas
+      disponibles y devuelve None (no se pegará ninguna imagen).
+    """
+    try:
+        excel = _obtener_excel_app()
+        wb = state._workbooks_abiertos.get(ruta_excel)
+        if wb is None:
+            wb = excel.Workbooks.Open(ruta_excel, UpdateLinks=0)
+            state._workbooks_abiertos[ruta_excel] = wb
+        nombres = _nombres_hojas(wb)
+    except Exception as e:
+        msg = f"[ERROR] No se pudo abrir el Excel de indicadores SSO para leer sus hojas: {e}"
+        state.errores.append(msg)
+        print(f"  ✗ {msg}")
+        return None
+
+    pref = (nombre_preferido or "").strip().lower()
+    for n in nombres:
+        if n.strip().lower() == pref:
+            return n
+
+    if len(nombres) == 1:
+        unica = nombres[0]
+        msg = (f"[AVISO] No se encontró la hoja '{nombre_preferido}' en "
+               f"{os.path.basename(ruta_excel)}; el libro tiene una sola hoja → "
+               f"usando '{unica}'.")
+        state.errores.append(msg)
+        print(f"  ⚠ {msg}")
+        return unica
+
+    msg = (f"[ERROR] No se encontró la hoja '{nombre_preferido}' en "
+           f"{os.path.basename(ruta_excel)}. Hojas disponibles: "
+           f"{', '.join(nombres)}. Indica el nombre correcto en el panel.")
+    state.errores.append(msg)
+    print(f"  ✗ {msg}")
+    return None
+
+
 def exportar_imagen_excel(ruta_excel, hoja, rango, nombre_imagen):
     return exportar_imagen_excel_rangos(ruta_excel, hoja, [rango], nombre_imagen)
 
@@ -117,10 +165,15 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
     """
     Copia una o más áreas de Excel como imagen. Si hay varios rangos, usa Union
     (útil para repetir fila de encabezado + cuerpo).
+
+    Devuelve la ruta del PNG SOLO si se generó una imagen nueva; devuelve None si
+    falla (hoja inexistente, portapapeles, etc.). Nunca reutiliza un PNG de una
+    corrida anterior: borra cualquier archivo previo con ese nombre antes de
+    exportar, para que el documento no pegue datos de otra semana.
     """
     if not lista_rangos:
         state.errores.append(f"[ERROR] Sin rangos para exportar ({nombre_imagen})")
-        return os.path.join(r"C:\\Temp", nombre_imagen)
+        return None
 
     carpeta_temp = r"C:\\Temp"
     if not os.path.exists(carpeta_temp):
@@ -129,6 +182,14 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
     imagen_salida = os.path.join(carpeta_temp, nombre_imagen)
     rango_desc = ",".join(lista_rangos)
 
+    # Borrar cualquier imagen previa: si la exportación falla, el archivo no debe
+    # existir para que agregar_imagen no pegue una versión vieja.
+    try:
+        if os.path.exists(imagen_salida):
+            os.remove(imagen_salida)
+    except OSError:
+        pass
+
     try:
         excel = _obtener_excel_app()
         wb = state._workbooks_abiertos.get(ruta_excel)
@@ -136,7 +197,20 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
             wb = excel.Workbooks.Open(ruta_excel, UpdateLinks=0)
             state._workbooks_abiertos[ruta_excel] = wb
 
-        ws = wb.Worksheets(hoja)
+        # Hoja inexistente → mensaje EXPLÍCITO (no un HRESULT críptico de COM).
+        try:
+            ws = wb.Worksheets(hoja)
+        except Exception:
+            try:
+                disponibles = ", ".join(_nombres_hojas(wb))
+            except Exception:
+                disponibles = "(no se pudieron leer)"
+            msg = (f"[ERROR] La hoja '{hoja}' no existe en "
+                   f"{os.path.basename(ruta_excel)}. Hojas disponibles: {disponibles}")
+            state.errores.append(msg)
+            print(f"  ✗ {msg}")
+            return None
+
         rng = ws.Range(lista_rangos[0])
         for addr in lista_rangos[1:]:
             rng = excel.Union(rng, ws.Range(addr))
@@ -156,17 +230,18 @@ def exportar_imagen_excel_rangos(ruta_excel, hoja, lista_rangos, nombre_imagen):
 
         if img is not None:
             img.save(imagen_salida, "PNG")
-        else:
-            msg = f"[ERROR] No se pudo obtener imagen del portapapeles ({hoja} {rango_desc}) tras {intentos} intentos"
-            state.errores.append(msg)
-            print(f"  ✗ {msg}")
+            return imagen_salida
+
+        msg = f"[ERROR] No se pudo obtener imagen del portapapeles ({hoja} {rango_desc}) tras {intentos} intentos"
+        state.errores.append(msg)
+        print(f"  ✗ {msg}")
+        return None
 
     except Exception as e:
         msg = f"[ERROR] Falló exportación de imagen {hoja} {rango_desc}: {e}"
         state.errores.append(msg)
         print(f"  ✗ {msg}")
-
-    return imagen_salida
+        return None
 
 # Implementa una parte específica de la lógica del informe.
 def _fila_tiene_contenido_util(row_vals):

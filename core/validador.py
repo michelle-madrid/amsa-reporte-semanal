@@ -137,11 +137,15 @@ def _encontrar_en_fila(v_abs, nums_fila, tol=None, signed_val=None):
 
 _PAT_NUMERO = re.compile(r'[+\-] ?\d[\d.,]*|[+\-]?\d[\d.,]*')
 
-def _numeros_de_linea(linea):
+def _numeros_de_linea(linea, incluir_cero=False):
     """
     Extrae todos los valores numéricos distintos de una línea.
     Devuelve lista de (raw_str, float_abs_redondeado).
     Descarta: cero, años (1900-2100), y duplicados en valor absoluto.
+
+    incluir_cero=True conserva los ceros: necesario para KPIs legítimamente en
+    cero (ej. "+0 kt; +0.0% en línea con PM"), que de otro modo dejarían la
+    línea sin números y se descartarían sin validar.
     """
     # limpiar_texto_global inserta NBSP (U+00A0) entre el signo y el dígito para
     # evitar saltos de línea en Word (ej. "-3.6" → " - 3.6").
@@ -154,7 +158,7 @@ def _numeros_de_linea(linea):
     for m in _PAT_NUMERO.finditer(linea):
         raw = m.group(0)
         v = _a_float(raw)
-        if v is None or v == 0:
+        if v is None or (v == 0 and not incluir_cero):
             continue
         v_abs = round(abs(v), 4)
         if 1900 <= v_abs <= 2100 and v_abs == int(v_abs):
@@ -798,7 +802,16 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         linea_dev = re.sub(r'^F\s*\d{1,2}\b', '', linea_dev, flags=re.IGNORECASE)
         numeros = _numeros_de_linea(linea_dev)
         if not numeros:
-            continue
+            # KPI legítimamente en cero (ej. "Movimiento en Rajo Tesoro: (+0 kt;
+            # +0.0%) en línea con PM"): _numeros_de_linea descarta los ceros y
+            # deja la línea vacía. Si tiene etiqueta reconocible e indicador de
+            # estado, es un indicador real que debe validarse (su 0 contra el 0
+            # del Excel) — si se descarta, la verificación inversa Excel→Word lo
+            # marca como "sin validar".
+            if _extraer_label(linea) and _extraer_status_word(linea):
+                numeros = _numeros_de_linea(linea_dev, incluir_cero=True)
+            if not numeros:
+                continue
         # Solo comparar los dos primeros valores (UNID + %); el resto son
         # números extra del texto (fases, fechas, etc.) que no corresponden.
         if len(numeros) > 2:
@@ -1104,6 +1117,16 @@ def validar_kpis_vs_excel(informes, wb_com):
         ok, warn = _comparar_y_reportar(nombre_seccion, cfg_ad["hoja"], lineas, tabla_excel)
         total_ok += ok
         total_warn += warn
+
+    # 3. Siglas sin contexto (texto Word, independiente del Excel)
+    try:
+        from core.siglas import detectar_siglas_sin_contexto
+        for sec in detectar_siglas_sin_contexto(informes):
+            _resultados.append(sec)
+            print(f"\n  {sec['clave']}: {sec['n_siglas']} sigla(s) sin contexto — "
+                  f"{', '.join(k['label'] for k in sec['kpis'])}")
+    except Exception as e:
+        print(f"\n  ! No se pudo analizar siglas sin contexto: {e}")
 
     print(f"\n{'═'*65}")
     if total_warn == 0:

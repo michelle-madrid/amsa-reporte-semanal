@@ -811,6 +811,16 @@
           </div>
         </div>
 
+        <div class="path-field" data-seccion="sso-ind">
+          <div class="pf-label">Hoja de Indicadores SSO</div>
+          <div class="pf-right">
+            <div class="browse-row">
+              <input type="text" id="g_hoja_ind" placeholder="Informe Viernes" value="Informe Viernes">
+            </div>
+            <span class="field-hint">Hoja del <code>BDatos</code> con las 3 tablas de accidentabilidad. Si el libro trae una sola hoja, se usa esa automáticamente.</span>
+          </div>
+        </div>
+
         <div class="path-field">
           <div class="pf-label">Carpeta destino</div>
           <div class="pf-right">
@@ -1721,6 +1731,7 @@ async function lanzarGenerar() {
     nombre_archivo:      document.getElementById('g_nombre').value.trim(),
     excel_madre:         document.getElementById('g_excel_madre').value.trim(),
     excel_indicadores:   document.getElementById('g_excel_ind').value.trim(),
+    hoja_indicadores:    document.getElementById('g_hoja_ind') ? document.getElementById('g_hoja_ind').value.trim() : '',
     carpeta_destino:     document.getElementById('g_destino').value.trim(),
     informes: {
       MLP:  document.getElementById('g_inf_MLP').value.trim(),
@@ -2302,6 +2313,32 @@ function renderResultados(secciones, container) {
           Renombrar y re-validar
         </button>`;
       cont.appendChild(renDiv);
+      return;
+    }
+
+    // ── Sección de siglas sin contexto ───────────────────────────────
+    if (sec.tipo === 'siglas') {
+      const bodyId = `rsbody_${si}`;
+      const filas = (sec.kpis || []).map(k => `
+        <div class="kpi-row revisar">
+          <div class="kpi-icon"><span style="color:var(--err)">✗</span></div>
+          <div>
+            <div class="kpi-label">${_esc(k.label)}</div>
+            <div class="kpi-vals"><span style="color:var(--gray)">${_esc(k.detalle || '')}</span></div>
+          </div>
+          <div class="kpi-extra"></div>
+        </div>`).join('');
+      const nSig = (sec.kpis || []).length;
+      const div = document.createElement('div');
+      div.className = 'res-section';
+      div.innerHTML = `
+        <div class="res-sec-header warn" onclick="toggleSection('${bodyId}', this)">
+          <span class="rsh-name">${_esc(sec.clave)} — ${_esc(sec.nombre)}</span>
+          <span class="rsh-badge warn">⚠ ${nSig} sigla(s) sin contexto</span>
+          <span class="res-sec-arrow" id="arr_${bodyId}">▶</span>
+        </div>
+        <div class="res-sec-body" id="${bodyId}">${filas}</div>`;
+      cont.appendChild(div);
       return;
     }
 

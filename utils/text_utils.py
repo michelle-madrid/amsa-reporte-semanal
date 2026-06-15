@@ -416,8 +416,15 @@ def limpiar_texto_global(texto):
 
   # eliminar espacios antes de coma o punto y coma
   texto = re.sub(r' +([,;])', r'\1', texto)
+  # eliminar espacio (normal o NBSP) antes del '%': "14.5 %" → "14.5%"
+  texto = re.sub(r'[  ]+%', '%', texto)
   # colapsar espacios dobles o mas que pudieran haberse generado en pasos anteriores
   texto = re.sub(r' {2,}', ' ', texto)
+  # NUNCA dejar puntos dobles: colapsar dos o más puntos seguidos (aunque tengan
+  # espacios entre medio) en uno solo. Surge p.ej. al reemplazar un ".," final
+  # por "." o de texto fuente con doble punto. No toca decimales (un solo punto)
+  # ni separa oraciones legítimas ("Uno. Dos." no tiene puntos consecutivos).
+  texto = re.sub(r'\.(?:[ \t ]*\.)+', '.', texto)
 
   return texto
 

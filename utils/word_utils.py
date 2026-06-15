@@ -401,7 +401,9 @@ def _escribir_texto_con_especiales(p, texto, patron):
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_imagen(doc, ruta_imagen, ancho_cm, alto_cm=None, subtitulo=None):
-    if os.path.exists(ruta_imagen):
+    # ruta_imagen puede ser None cuando la exportación falló: en ese caso no se
+    # pega nada (nunca se reutiliza una imagen vieja).
+    if ruta_imagen and os.path.exists(ruta_imagen):
         tamaño_kb = os.path.getsize(ruta_imagen) // 1024
         if tamaño_kb == 0:
             msg = f"[ERROR] Imagen vacía (0 KB), no se pegará: {os.path.basename(ruta_imagen)}"

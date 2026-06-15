@@ -402,3 +402,9 @@ RUTA_PLANTILLA = BASE_DIR / "Template Viñetas Python.docx"
 
 # Guarda el marcador del encabezado de las tablas SSO de respaldo.
 SSO_MARCADOR_TABLA = "id del incidente"
+
+# Nombre por defecto de la hoja del Excel de indicadores SSO (BDatos*.xlsx) de
+# donde se exportan las 3 tablas de accidentabilidad (Anual/Mensual/Semanal).
+# Si el libro de la semana trae la hoja con otro nombre, se puede indicar en el
+# panel; y si el libro tiene una sola hoja, se usa esa automáticamente.
+HOJA_INDICADORES_SSO = "Informe Viernes"

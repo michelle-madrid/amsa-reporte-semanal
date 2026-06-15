@@ -529,6 +529,7 @@ def _generar(d):
                 incluir_gh            = d.get("incluir_gh",  True),
                 disco                 = d.get("disco") or None,
                 carpeta_personalizada = raiz_override,
+                hoja_indicadores      = (d.get("hoja_indicadores") or "").strip() or None,
             )
         else:
             # ── Modo Word nuevo: generación completa (comportamiento original) ──
@@ -552,6 +553,9 @@ def _generar(d):
                 incluir_gh      = d.get("incluir_gh",  True),
                 disco           = d.get("disco") or None,
                 carpeta_personalizada = raiz_override,
+                hoja_indicadores = (d.get("hoja_indicadores") or "").strip() or None,
+                excel_madre_override       = (d.get("excel_madre") or "").strip() or None,
+                excel_indicadores_override = (d.get("excel_indicadores") or "").strip() or None,
             )
 
         # Verificar formato del documento generado
