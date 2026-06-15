@@ -217,13 +217,23 @@ def _validar_clasificacion_acumulados(lineas_acum, clave):
                     errores.append(msg)
 
 
+# Compañías cuyas líneas 'Acumulado al mes/año' se obtienen del Excel madre al
+# renderizar (MLP C58:C59, CEN OXE B139:B140, ANT B76:B77, CMZ B62:B63). Para
+# ellas el texto de acumulado del Word fuente NUNCA es el que queda en el Word
+# final: con excel_madre se reemplaza por la celda del Excel, y sin excel_madre
+# se descarta (no se escribe). En ambos casos validar su presencia o coherencia
+# cualitativa sobre el texto fuente solo genera ruido (la comparación real Word
+# vs Excel ya la hace validar_kpis_vs_excel). FCAB sí renderiza sus acumulados
+# desde el texto fuente, así que para FCAB la validación sí aplica.
+_ACUMULADOS_DESDE_EXCEL = {"MLP", "CEN", "ANT", "CMZ"}
+
 # Valida que existan las líneas de acumulado mensual y anual en las principales desviaciones.
 def validar_acumulados_principales_desviaciones(texto_compania, clave, acumulados_desde_excel=False):
-  # Cuando hay Excel madre las líneas 'Acumulado al mes/año' se reemplazan por las
-  # celdas del Excel al renderizar (MLP C58:C59, CEN OXE B139:B140, ANT B76:B77,
-  # CMZ B62:B63). En ese caso el texto del Word fuente se descarta, así que validar
-  # su presencia o su coherencia cualitativa no aporta — solo genera ruido. Estas
-  # validaciones de acumulados solo aplican cuando el texto del Word es el que queda.
+  # Las validaciones de acumulados solo aplican cuando el texto del Word fuente es
+  # el que queda en el Word final. Para las compañías de _ACUMULADOS_DESDE_EXCEL
+  # eso nunca ocurre (ver nota arriba), independientemente de si hay excel_madre.
+  if clave in _ACUMULADOS_DESDE_EXCEL:
+    acumulados_desde_excel = True
   extractores_por_compania = {
     "MLP": [
       extraer_mina,

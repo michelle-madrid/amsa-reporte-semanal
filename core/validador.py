@@ -190,7 +190,13 @@ _BULLETS = set('·•‣▸▹►-–—*')
 # literal, por lo que el Word final trae el glifo en p.text. Hay que limpiarlo
 # antes de extraer la etiqueta, o KPIs legítimos (ej. "Producción Total de
 # Cátodos de Cu") se descartan y nunca se validan.
-_BULLET_PREFIX = re.compile(r'^[\s·•‣▸▹►○\-–—*​﻿]+')
+#
+# La viñeta de segundo nivel se inserta como la letra "o" + tab ("o\t", ver
+# agregar_circulo_blanco_manual). Hay que quitarla también, o la etiqueta queda
+# con prefijo "o " y rompe tanto el matching como las exclusiones por prefijo
+# (ej. FCAB "minera" no excluye "o Minera Zaldívar…"). Se quita "o"/guion solo
+# cuando va seguido de espacio, para no romper palabras como "oxidación".
+_BULLET_PREFIX = re.compile(r'^(?:[\s·•‣▸▹►○*​﻿]+|[o\-–—]\s+)+')
 
 def _extraer_label(linea):
     """
