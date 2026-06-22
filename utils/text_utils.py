@@ -293,6 +293,12 @@ def limpiar_texto_global(texto):
   # normalizar tabulaciones a espacio simple
   texto = re.sub(r'\t+', ' ', texto)
 
+  # normalizar espacios Unicode (NBSP, espacio fino, etc.) a espacio normal.
+  # Debe ir ANTES de la inserción deliberada de NBSP (más abajo) y del colapso
+  # de espacios dobles: el .docx fuente trae '\xa0'/' ' que el colapso
+  # r' {2,}' no reconoce y dejaba dobles espacios visibles en el informe.
+  texto = re.sub(r'[   -   　]', ' ', texto)
+
   # colapsar doble (o más) dos puntos antes de normalizar espaciado
   texto = re.sub(r"::+", ":", texto)
   # asegurar un solo espacio después de ":"
@@ -321,6 +327,8 @@ def limpiar_texto_global(texto):
   texto = re.sub(r'(?i)\besteril\b', 'Estéril', texto)
   texto = re.sub(r'(?i)\bzaldivar\b', 'Zaldívar', texto)
   texto = re.sub(r'(?i)\bplan\s+mensual\b', 'Plan Mensual', texto)
+  # normalizar "caex"/"Caex" (cualquier capitalización) → "CAEX"
+  texto = re.sub(r'(?i)\bcaex\b', 'CAEX', texto)
 
   # añadir año a fechas sin él: "15 de mayo" → "15 de mayo de 2026"
   # también normaliza "15 de mayo 2026" → "15 de mayo de 2026"
@@ -410,6 +418,8 @@ def limpiar_texto_global(texto):
   # Un valor exactamente cero no lleva signo: "(+0.0%)" / "(-0.0%)" → "(0.0%)".
   # Aplica en todo el documento (no solo Principales Desviaciones).
   texto = re.sub(r'(?<![\d.,])[+\-‑](0+(?:[.,]0+)?)(?![\d.,])', r'\1', texto)
+  # Una desviación en % exactamente cero va sin decimales: "0.0%" / "0,00%" → "0%".
+  texto = re.sub(r'(?<![\d.,])0+(?:[.,]0+)?%', '0%', texto)
 
   # NBSP antes del '-' (evita corte de línea); elimina espacio visible entre '-' y dígito.
   texto = re.sub(r'([ (])-\s*(\d)', lambda m: (' ' if m.group(1)==' ' else m.group(1)) + '‑' + m.group(2), texto)

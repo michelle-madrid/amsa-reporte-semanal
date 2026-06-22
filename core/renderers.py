@@ -1111,6 +1111,11 @@ def mlp_render_gestion_hidrica(doc, texto_compania, excel_madre):
       cabecera = match_cabecera.group(1).strip() + ": "
       resto = texto[match_cabecera.end():].strip()
 
+      # Tras el título "...:", los estados van en minúscula: "bajo plan",
+      # "sobre plan", "en línea" (mismo criterio que utils.text_utils).
+      resto = re.sub(r"^(Bajo|Sobre|En línea)\b",
+                     lambda m: m.group(0).lower(), resto)
+
       run_c = p.add_run(cabecera)
       run_c.bold = True
       run_c.font.name = "Arial"
