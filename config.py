@@ -215,12 +215,14 @@ CONFIG_CELDAS_DESVIACIONES = {
         "Mineral Apilado":                          ("D126", "F126"),
         "Mineral Beneficiado MET":                  ("D127", "F127", "G127"),
         "Ley de Cu MET":                            ("F128", "F128", "G128"),
+        "Recuperación de Cu MET":                   ("F129", "F129", "G129"),
         "Producción de ROM":                        ("D130", "F130", "G130"),
         # ── Cátodos — Planta Hidro OXE ────────────────────────────────────────
         "Producción de Cátodos de Cu OXE":          ("D132", "F132", "G132"),
         "Mineral Apilado OXE":                      ("D133", "F133", "G133"),
         "Mineral Beneficiado OXE":                  ("D134", "F134", "G134"),
         "Ley de Cu OXE":                            ("F135", "F135", "G135"),
+        "Recuperación de Cu OXE":                   ("F136", "F136", "G136"),
     },
     "CMZ": {
         # ── Mina ──────────────────────────────────────────────────────────────

@@ -305,6 +305,10 @@ def limpiar_texto_global(texto):
   texto = re.sub(r":(?!\s)", ": ", texto)
   texto = re.sub(r":\s{2,}", ": ", texto)
 
+  # asegurar un solo espacio después de ";"
+  texto = re.sub(r";(?!\s)", "; ", texto)
+  texto = re.sub(r";\s{2,}", "; ", texto)
+
   # corregir formato de hora: "15: 00" → "15:00" (debe ir después de normalizar espacios)
   texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
 
@@ -315,12 +319,15 @@ def limpiar_texto_global(texto):
   texto = normalizar_decimales(texto)
 
   # añadir separador de miles (coma) a enteros de 4+ dígitos, excepto años (1900-2099)
+  # y excepto IDs (números precedidos por "ID" / "ID:"): son identificadores, no cantidades.
+  # También se excluyen números unidos por guion a un código alfanumérico
+  # (ej. "583-PP-7001"): el guion pegado a una letra/dígito indica un tag, no una cantidad.
   def _sep_miles(m):
     n = int(m.group(0))
     if 1900 <= n <= 2099:
       return m.group(0)
     return f"{n:,}"
-  texto = re.sub(r'\b\d{4,}\b', _sep_miles, texto)
+  texto = re.sub(r'(?<!ID )(?<!ID: )(?<!\w-)\b\d{4,}\b(?!-\w)', _sep_miles, texto, flags=re.IGNORECASE)
 
   # normalizar "plan mensual" (cualquier capitalización) → "Plan Mensual"
   # corregir 'Esteril' sin tilde

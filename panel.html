@@ -2394,9 +2394,11 @@ function renderResultados(secciones, container) {
           const lbl = (total === 2)
             ? (i === 0 ? '<span class="kpi-val-lbl">unid.</span>' : '<span class="kpi-val-lbl">%</span>')
             : '<span class="kpi-val-lbl">%</span>';
-          return v.ok
-            ? `<span class="kpi-val-ok">${lbl}Word ${_esc(v.word)} = Excel ${v.excel}</span>`
-            : `<span class="kpi-val-warn">${lbl}Word ${_esc(v.word)} ≠ Excel ${v.excel} <span style="opacity:.7">(dif ${v.dif})</span></span>`;
+          if (v.ok)
+            return `<span class="kpi-val-ok">${lbl}Word ${_esc(v.word)} = Excel ${v.excel}</span>`;
+          if (v.signo)
+            return `<span class="kpi-val-warn">${lbl}Word ${_esc(v.word)} ≠ Excel ${v.excel} signo invertido</span>`;
+          return `<span class="kpi-val-warn">${lbl}Word ${_esc(v.word)} ≠ Excel ${v.excel} <span style="opacity:.7">(dif ${v.dif})</span></span>`;
         }).join('');
         valsHtml = `<div class="kpi-vals">${partes}</div>`;
       }

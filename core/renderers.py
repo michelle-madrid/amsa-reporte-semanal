@@ -378,8 +378,11 @@ def _render_fecha_accidente(doc, fecha, texto_resto):
     run_resto.font.size = Pt(11)
 
 def mlp_render_accidentabilidad(doc, lineas):
-  patron_fecha_embebida = re.compile(r"\(Fecha:\s*(\d{1,2}\s+de\s+\w+\s+de\s+\d{4})\):\s*")
-  patron_fecha_inicio   = re.compile(r"^(\d{1,2}\s+de\s+\w+\s+de\s+\d{4})")
+  # El "de" antes del año es opcional: el fuente a veces escribe "21 de junio 2026"
+  # (sin "de"). Si no se tolera, la línea no se reconoce como fecha y cae a una
+  # viñeta normal al mismo nivel que el resto, en vez de la Viñeta 3 (un nivel más adentro).
+  patron_fecha_embebida = re.compile(r"\(Fecha:\s*(\d{1,2}\s+de\s+\w+(?:\s+de)?\s+\d{4})\):\s*")
+  patron_fecha_inicio   = re.compile(r"^(\d{1,2}\s+de\s+\w+(?:\s+de)?\s+\d{4})")
 
   for linea in lineas:
     linea = linea.strip()

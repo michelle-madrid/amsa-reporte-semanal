@@ -902,6 +902,7 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
                     #  - DESVIACIÓN %: siempre a 1 decimal.
                     dif_val = None
                     excel_disp = cercano
+                    signo_malo = False
                     if cercano is not None:
                         es_unid = (total_nums == 2 and i == 0)
                         dec = _decimales_unidad(label_norm, excel_label) if es_unid else 1
@@ -911,15 +912,30 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
                         # (ej. -100.0), las unidades como entero. Se formatea como string
                         # para que el panel no descarte el ".0" final.
                         excel_disp = _fmt_dec(cercano, dec)
+                        # Verificación de signo SOLO para la desviación % (no para UNID,
+                        # cuyo signo lo da el texto cualitativo "mayor/menor"). Si la
+                        # magnitud coincide pero el signo Word vs Excel difiere, es un
+                        # error de signo (ej. Word +8.0 contra Excel -8.0).
+                        if ok and not es_unid and round(v_abs, dec) != 0 and round(cercano, dec) != 0:
+                            word_neg  = raw.strip().startswith('-')
+                            excel_neg = cercano < 0
+                            if word_neg != excel_neg:
+                                ok = False
+                                signo_malo = True
                     marca = "✓" if ok else "✗"
                     if ok:
                         print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}")
+                    elif signo_malo:
+                        print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}  (signo invertido)")
+                        n_warn += 1
+                        kpi["estado"] = "revisar"
                     else:
                         print(f"      {raw:>14}  →  {marca}  Excel = {excel_disp}  (dif: {dif_val})")
                         n_warn += 1
                         kpi["estado"] = "revisar"
                     kpi["valores"].append({
                         "word": raw, "excel": excel_disp, "ok": ok, "dif": dif_val,
+                        "signo": signo_malo,
                     })
 
             # Validar indicador de estado (bajo PM / sobre PM / en línea)
