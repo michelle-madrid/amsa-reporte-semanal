@@ -441,7 +441,7 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
 _PATRON_EXCEL_FAENA = {
     "MLP":             "mlp semana",
     "CEN":             "informe semanal",
-    "ANT":             "informe semanal",
+    "ANT":             "informe semana",
     "CMZ":             "proyectado",
     "FCAB":            "amsa",
     "SSO":             "eventos seguridad",

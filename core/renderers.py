@@ -416,10 +416,10 @@ def mlp_render_accidentabilidad(doc, lineas):
 
 # Renderiza accidentabilidad para todas las compañías excepto MLP.
 # Las líneas de fecha (nivel 3) absorben líneas de continuación que empiezan con "-".
-def render_accidentabilidad_generica(doc, lineas):
+def render_accidentabilidad_generica(doc, lineas, compania=None):
   # Acepta "06 de abril de 2026", "06 de abril 2026" y "9-5-26" / "9-5-2026"
   patron_fecha = re.compile(r"^\d{1,2}\s+de\s+\w+(?:\s+de)?\s+\d{4}|^\d{1,2}-\d{1,2}-\d{2,4}")
-  pendiente = None  # {'fecha': str, 'texto': str}
+  pendiente = None  # {'fecha': str, 'texto': str, 'colon': bool}
 
   def _flush():
     nonlocal pendiente
@@ -431,9 +431,13 @@ def render_accidentabilidad_generica(doc, lineas):
     p.paragraph_format.space_after = Pt(6)
     # Tras la fecha NO va ":". Si el texto ya trae su propia puntuación
     # (".", ",", ";"), se respeta; si no, se separa con ". ".
+    # Excepción Zaldívar (CMZ): si la fuente escribió ":" tras la fecha, se
+    # respeta el ":" en vez de reemplazarlo por ".".
     texto = pendiente['texto']
     if texto[:1] in ".,;:":
       fecha_txt = pendiente['fecha']
+    elif compania == "CMZ" and pendiente.get('colon'):
+      fecha_txt = f"{pendiente['fecha']}: "
     else:
       fecha_txt = f"{pendiente['fecha']}. "
     run_f = p.add_run(fecha_txt)
@@ -455,8 +459,10 @@ def render_accidentabilidad_generica(doc, lineas):
     if m:
       _flush()
       fecha = m.group(0)
-      resto = limpia[len(fecha):].lstrip(": ").strip()
-      pendiente = {'fecha': fecha, 'texto': resto}
+      tras_fecha = limpia[len(fecha):]
+      tenia_colon = tras_fecha.lstrip().startswith(":")
+      resto = tras_fecha.lstrip(": ").strip()
+      pendiente = {'fecha': fecha, 'texto': resto, 'colon': tenia_colon}
     elif pendiente is not None and limpia.startswith("-"):
       cont = limpia.lstrip("- ").strip()
       pendiente['texto'] = (pendiente['texto'] + " " + cont).strip()
@@ -1729,7 +1735,7 @@ def agregar_hechos_relevantes(doc, texto_compania, compania=None):
       mlp_render_accidentabilidad(doc, lineas)
 
     elif seccion["titulo"] == "Accidentabilidad" and compania in ("FCAB", "CMZ"):
-      render_accidentabilidad_generica(doc, lineas)
+      render_accidentabilidad_generica(doc, lineas, compania)
 
     elif seccion["titulo"] == "Asuntos Públicos" and compania == "MLP":
       mlp_render_asuntos_publicos(doc, lineas)

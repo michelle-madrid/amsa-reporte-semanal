@@ -313,7 +313,10 @@ def limpiar_texto_global(texto):
   texto = re.sub(r'\b(\d{1,2}):\s+(\d{2})\b', r'\1:\2', texto)
 
   # espacio entre número y unidad: +0.1kOz → +0.1 kOz
-  texto = re.sub(r'(\d)([a-zA-Z])', r'\1 \2', texto)
+  # No separar referencias de fase/pala (F12N, F9W, S04, F12E): en esos casos
+  # el número va precedido por una letra, así que se exige que el inicio del
+  # número NO venga tras una letra (ni dígito, para anclar al inicio del número).
+  texto = re.sub(r'(?<![A-Za-z\d])(\d+(?:[.,]\d+)*)([a-zA-Z])', r'\1 \2', texto)
 
   # normalizar separadores decimales de coma a punto
   texto = normalizar_decimales(texto)
