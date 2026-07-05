@@ -1547,8 +1547,11 @@ def fcab_render_tren(doc, texto_compania, excel_madre=None):
       else:
         otros_bloques.append(("detalle", t))
 
-  if primera_linea_general:
-    agregar_parrafo_fcab_alineado(doc, primera_linea_general, bold=False, espacio_antes=False)
+  # La línea "El transporte total del grupo ..." es un intro a nivel grupo que en el
+  # origen va ANTES del subtítulo "Tren:", por lo que extraer_tren no la captura y se
+  # renderiza en procesar_fcab (resaltada) justo bajo "Principales Desviaciones".
+  # Aquí solo se detecta para evitar que se clasifique como detalle si algún origen la
+  # colocara dentro del bloque Tren; no se vuelve a renderizar para no duplicarla.
 
   if transporte_total:
     agregar_parrafo_fcab_alineado(doc, transporte_total, bold=True, espacio_antes=False)
@@ -1638,6 +1641,16 @@ def fcab_render_camion(doc, texto_compania, excel_madre=None):
     errores.append(f"FCAB - Camión: línea no clasificada -> '{linea}'")
     agregar_circulo_blanco_manual(doc, linea, espacio_despues=6)
 
+# Busca la línea intro a nivel grupo ("El transporte total del grupo ...") que en el
+# origen va antes del subtítulo "Tren:". Devuelve la línea limpia o None si no existe.
+def extraer_linea_grupo_fcab(texto):
+  for linea in texto.split("\n"):
+    t = re.sub(r"^[•○o·\-\s​﻿]+", "", linea).strip()
+    clave = normalizar_texto_clave(t)
+    if "transporte total del grupo" in clave:
+      return t
+  return None
+
 # Procesa la sección o faena indicada usando las reglas correspondientes.
 def procesar_fcab(doc, texto_compania, excel_madre):
   agregar_hechos_relevantes(doc, texto_compania, compania="FCAB")
@@ -1648,6 +1661,15 @@ def procesar_fcab(doc, texto_compania, excel_madre):
   set_seccion_desviaciones(True)
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
   validar_acumulados_principales_desviaciones(texto_compania, "FCAB", acumulados_desde_excel=excel_madre is not None)
+
+  # Intro a nivel grupo, resaltada en amarillo, entre el título y el subtítulo "Tren:".
+  linea_grupo = extraer_linea_grupo_fcab(texto_compania)
+  if linea_grupo:
+    agregar_parrafo_fcab_alineado(doc, linea_grupo, bold=False, espacio_antes=False, resaltar=True)
+  else:
+    print("[WARNING] FCAB: no se encontró la línea 'El transporte total del grupo ...'.")
+    errores.append("FCAB: falta la línea intro 'El transporte total del grupo ...'")
+
   fcab_render_tren(doc, texto_compania, excel_madre)
   fcab_render_camion(doc, texto_compania, excel_madre)
   set_seccion_desviaciones(False)

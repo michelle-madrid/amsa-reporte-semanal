@@ -1,7 +1,7 @@
 """Funciones de apoyo para escribir y dar formato al documento Word."""
 
 from docx.shared import Pt, Cm, RGBColor
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT, WD_COLOR_INDEX
 from docx.oxml import parse_xml
 from docx.oxml.ns import qn
 
@@ -181,7 +181,7 @@ def agregar_texto_subrayado(doc, texto, left_indent_cm=0.85, espacio_despues=6, 
   run.underline = True
 
 # Agrega al documento el elemento indicado por su nombre.
-def agregar_parrafo_fcab_alineado(doc, texto, bold=False, espacio_antes=False):
+def agregar_parrafo_fcab_alineado(doc, texto, bold=False, espacio_antes=False, resaltar=False):
   texto = limpiar_texto_global(texto)
 
   if espacio_antes:
@@ -198,6 +198,8 @@ def agregar_parrafo_fcab_alineado(doc, texto, bold=False, espacio_antes=False):
   run.font.name = "Arial"
   run.font.size = Pt(11)
   run.bold = bold
+  if resaltar:
+    run.font.highlight_color = WD_COLOR_INDEX.YELLOW
 
 # Agrega al documento el elemento indicado por su nombre.
 def agregar_circulo_blanco_manual(doc, texto, left_indent_cm=1.9, bullet_indent_cm=1.45, espacio_despues=6, bold=False, bold_parentheses=False):
