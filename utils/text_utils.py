@@ -359,6 +359,11 @@ def limpiar_texto_global(texto):
     texto, flags=re.IGNORECASE,
   )
 
+  # forzar meses a minúscula: en español los nombres de mes van en minúscula,
+  # aunque el texto fuente los escriba capitalizados (ej. "Mayo" → "mayo"). Los
+  # límites de palabra evitan tocar "mayor" (comparte prefijo con "mayo").
+  texto = re.sub(rf'\b{_meses_pat}\b', lambda m: m.group(0).lower(), texto, flags=re.IGNORECASE)
+
   # normalizar "alto potencial (aap)" (cualquier capitalización) → "Alto Potencial (AAP)"
   texto = re.sub(r'(?i)\balto\s+potencial\s*\(\s*aap\s*\)', 'Alto Potencial (AAP)', texto)
 
