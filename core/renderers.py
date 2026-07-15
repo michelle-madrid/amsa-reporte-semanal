@@ -1372,7 +1372,7 @@ def cmz_render_mina(doc, texto_compania, excel_madre=None):
     elif clave.startswith("remanejo"):
       remanejo = normalizar_linea_cmz(t)
 
-    elif re.match(r"^fase\s+\S+", t, flags=re.IGNORECASE):
+    elif re.match(r"^fases?\s+\S+", t, flags=re.IGNORECASE):
       fases.append(normalizar_linea_cmz(t))
 
     elif "extraccion" in clave:
@@ -1662,10 +1662,10 @@ def procesar_fcab(doc, texto_compania, excel_madre):
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
   validar_acumulados_principales_desviaciones(texto_compania, "FCAB", acumulados_desde_excel=excel_madre is not None)
 
-  # Intro a nivel grupo, resaltada en amarillo, entre el título y el subtítulo "Tren:".
+  # Intro a nivel grupo, entre el título y el subtítulo "Tren:". Sin resaltar.
   linea_grupo = extraer_linea_grupo_fcab(texto_compania)
   if linea_grupo:
-    agregar_parrafo_fcab_alineado(doc, linea_grupo, bold=False, espacio_antes=False, resaltar=True)
+    agregar_parrafo_fcab_alineado(doc, linea_grupo, bold=False, espacio_antes=False)
   else:
     print("[WARNING] FCAB: no se encontró la línea 'El transporte total del grupo ...'.")
     errores.append("FCAB: falta la línea intro 'El transporte total del grupo ...'")

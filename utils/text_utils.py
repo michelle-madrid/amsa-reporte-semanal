@@ -84,7 +84,7 @@ def clasificar_subtitulo_cmz(texto):
   if t.startswith("remanejo"):
     return "Remanejo"
 
-  if re.match(r"^fase\s+\S+", texto.strip(), flags=re.IGNORECASE):
+  if re.match(r"^fases?\s+\S+", texto.strip(), flags=re.IGNORECASE):
     return "Fase"
 
   if t.startswith("extraccion") or t.startswith("total extraccion"):
@@ -233,7 +233,11 @@ def normalizar_linea_cmz(texto):
     resultado = f"Remanejo: {texto_limpio}" if texto_limpio else "Remanejo:"
 
   elif etiqueta == "Fase":
-    match = re.match(r"(?i)^(fase\s+\S+(?:\s+y\s+\S+)?)\s*(.*)$", original)
+    # El encabezado va hasta antes de la desviación "(-123 kt; ...)". Cada código de
+    # fase es un número con letra opcional (pegada "09W" o separada "9 W") y pueden
+    # unirse con "y" ("Fase 09E y 09B", "Fases 9 E y 9 B"). Se separa ahí para dejar
+    # el encabezado en negrita y el resto normal.
+    match = re.match(r"(?i)^(fases?\s+\d+(?:\s*[A-Za-z]\b)?(?:\s+y\s+\d+(?:\s*[A-Za-z]\b)?)*)\s*(.*)$", original)
     if match:
       encabezado = match.group(1).strip()
       resto = match.group(2).strip(" :.-")
