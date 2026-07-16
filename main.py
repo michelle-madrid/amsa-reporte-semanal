@@ -319,7 +319,11 @@ def _construir_doc(
         if procesador:
             # Solo regenerar imagen Excel para las faenas seleccionadas
             excel_para_faena = excel_madre if (faenas_con_excel is None or clave in faenas_con_excel) else None
+            # Ruta del Word fuente de esta faena (si existe) para que los renderers
+            # puedan re-leer metadatos perdidos al aplanar el texto (ej. numeración).
+            state.ruta_word_actual = (rutas_word or {}).get(clave)
             procesador(doc, texto_compania, excel_para_faena)
+            state.ruta_word_actual = None
 
     # Accidentabilidad Back-up — siempre al final, después de todas las faenas
     agregar_titulo(doc, "Accidentabilidad Back-up", nivel=1, nueva_pagina=True)

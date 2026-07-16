@@ -5,6 +5,9 @@ import re
 import unicodedata
 import datetime
 
+from docx import Document
+
+import state
 from config import CONFIG_COMPANIAS, INCLUIR_ESTADO_FASES_DESARROLLO, ORDEN_PRINCIPALES_DESVIACIONES, NIVEL_BASE_POR_SECCION, NIVEL_POR_COMPANIA_SECCION_SUBTITULO
 from state import errores
 from utils.text_utils import *
@@ -988,11 +991,33 @@ def mlp_render_mina(doc, texto_compania, excel_madre=None):
   if remanejo:
     agregar_viñeta(doc, remanejo, nivel=2, espacio_despues=6)
 
+# Devuelve el set de textos (p.text.strip()) de párrafos que son ítems de lista con
+# numeración/viñeta de Word (w:numPr) en el Word fuente. La numeración automática no
+# viaja en p.text al aplanar el informe, así que se re-lee del original para reponerla.
+def _textos_numerados_word(ruta_word):
+  if not ruta_word or not os.path.isfile(ruta_word):
+    return set()
+  try:
+    doc = Document(ruta_word)
+  except Exception:
+    return set()
+  W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+  numeradas = set()
+  for p in doc.paragraphs:
+    t = p.text.strip()
+    if t and (pPr := p._p.find(f"{W}pPr")) is not None and pPr.find(f"{W}numPr") is not None:
+      numeradas.add(t)
+  return numeradas
+
 # Renderiza contenido específico dentro del documento Word.
 def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
   contenido = [linea.strip() for linea in extraer_planta_desaladora(texto_compania) if linea.strip()]
   if not contenido:
     return
+
+  # Líneas que en el Word fuente eran ítems de lista numerada; se usan para reponer
+  # la numeración (1., 2., ...) perdida al aplanar el texto (ver _textos_numerados_word).
+  lineas_numeradas = _textos_numerados_word(state.ruta_word_actual)
   doc.add_paragraph("")
   p = doc.add_paragraph("Planta Desaladora:", style="Normal AMSA")
   p.paragraph_format.space_before = Pt(6)
@@ -1018,11 +1043,42 @@ def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
       t,
     )
 
+  RE_FECHA = r"^\d{1,2}(?:\s(?:al|y)\s\d{1,2})?(?:\sde)?\s\w+(?:\s(?:de\s)?\d{4})?:"
+  num_item = 0
   i = 0
   while i < len(contenido):
     texto = _norm_fecha(contenido[i])
+    es_fecha = re.match(RE_FECHA, texto)
 
-    if re.match(r"^\d{1,2}(?:\s(?:al|y)\s\d{1,2})?(?:\sde)?\s\w+(?:\sde\s\d{4})?:", texto):
+    # Ítem de lista numerada en el Word original: reponer la numeración (1., 2., ...).
+    # Las líneas de fecha van con viñeta ○ (abajo), no numeradas. El contador se
+    # reinicia en cualquier línea no numerada para que cada bloque arranque en 1.
+    if contenido[i] in lineas_numeradas and not es_fecha:
+      num_item += 1
+      p = doc.add_paragraph(style="Normal AMSA")
+      p.paragraph_format.line_spacing = 1.0
+      p.paragraph_format.space_before = Pt(0)
+      p.paragraph_format.space_after = Pt(6)
+      p.paragraph_format.left_indent = Cm(1.27)
+      p.paragraph_format.first_line_indent = Cm(-0.42)
+      _agregar_tab_stop(p, Cm(1.27))
+
+      run_num = p.add_run(f"{num_item}.\t")
+      run_num.font.name = "Arial"
+      run_num.font.size = Pt(11)
+      run_num.bold = False
+
+      run_txt = p.add_run(limpiar_texto_global(texto))
+      run_txt.font.name = "Arial"
+      run_txt.font.size = Pt(11)
+      run_txt.bold = False
+
+      i += 1
+      continue
+
+    num_item = 0
+
+    if es_fecha:
       if i + 1 < len(contenido) and contenido[i + 1].strip().startswith("Restricción:"):
         texto = texto.strip() + " " + contenido[i + 1].strip()
         i += 1
@@ -1549,7 +1605,7 @@ def fcab_render_tren(doc, texto_compania, excel_madre=None):
 
   # La línea "El transporte total del grupo ..." es un intro a nivel grupo que en el
   # origen va ANTES del subtítulo "Tren:", por lo que extraer_tren no la captura y se
-  # renderiza en procesar_fcab (resaltada) justo bajo "Principales Desviaciones".
+  # renderiza en procesar_fcab (sin resaltar) justo bajo "Principales Desviaciones".
   # Aquí solo se detecta para evitar que se clasifique como detalle si algún origen la
   # colocara dentro del bloque Tren; no se vuelve a renderizar para no duplicarla.
 
@@ -1662,7 +1718,8 @@ def procesar_fcab(doc, texto_compania, excel_madre):
   agregar_titulo(doc, "Principales Desviaciones", nivel=2)
   validar_acumulados_principales_desviaciones(texto_compania, "FCAB", acumulados_desde_excel=excel_madre is not None)
 
-  # Intro a nivel grupo, entre el título y el subtítulo "Tren:". Sin resaltar.
+  # Intro a nivel grupo ("El transporte total del grupo ..."), entre el título y el
+  # subtítulo "Tren:". Se muestra SIN resaltar (resaltar=False, el default).
   linea_grupo = extraer_linea_grupo_fcab(texto_compania)
   if linea_grupo:
     agregar_parrafo_fcab_alineado(doc, linea_grupo, bold=False, espacio_antes=False)
