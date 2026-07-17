@@ -402,12 +402,22 @@ def limpiar_texto_global(texto):
     texto = re.sub(r"\bEn línea\b", bajar_estado, texto)
 
   # asegurar que las líneas de contenido terminen con . o :
-  # Solo aplica a líneas con contenido real (tienen ": " = título + cuerpo), no a títulos sueltos
   texto = texto.rstrip()
   if texto and texto[-1] == ",":
+    # Coma final: cierre inválido → reemplazar por punto (nunca dejar ",.").
     texto = texto[:-1] + "."
-  elif texto and texto[-1] not in (".", ":", ";") and ": " in texto:
-    texto = texto + "."
+  elif len(texto) >= 2 and texto[-1] == ":" and texto[-2] in (")", "]"):
+    # ":" final justo tras un cierre de paréntesis/corchete ("(AAP):") no introduce
+    # nada: es una afirmación completa → debe cerrar en "." (un punto, no dos puntos).
+    texto = texto[:-1] + "."
+  elif texto and texto[-1] not in (".", ":", ";"):
+    # Añadir "." solo cuando es claramente contenido y no un título/etiqueta suelta:
+    #  - tiene cuerpo tras un título → contiene ": "
+    #  - o cierra en un carácter de fin de contenido: ")", "]", "%" o un dígito.
+    # Los títulos/etiquetas sueltas terminan en letra ("Accidentabilidad",
+    # "Novedades", "Incidentes ambientales") y se dejan sin punto.
+    if ": " in texto or texto[-1] in (")", "]", "%") or texto[-1].isdigit():
+      texto = texto + "."
   # Añadir '+' en paréntesis solo en Principales Desviaciones
   if _en_seccion_desviaciones:
     def _signo_positivo(m):

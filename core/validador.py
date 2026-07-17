@@ -38,6 +38,7 @@ def _a_float(s):
     """
     Convierte string numérico a float manejando:
     - separador de miles con coma:  "450,123"   → 450123.0
+    - separador de miles con punto: "2.325"      → 2325.0   (formato chileno)
     - decimal con coma:             "92,5"       → 92.5
     - decimal con punto:            "92.5"       → 92.5
     - miles + decimal punto:        "1,234,567.89" → 1234567.89
@@ -47,6 +48,12 @@ def _a_float(s):
         s = s.replace(",", "")
     elif re.match(r'^-?\d{1,3}(,\d{3})+\.\d+$', s):
         s = s.replace(",", "")
+    # Miles con punto (formato chileno): "2.325"->2325, "1.234.567"->1234567. Se exige
+    # parte entera distinta de cero (para no tocar decimales tipo "0.080") y grupos de
+    # exactamente 3 dígitos (para no tocar "17.0"/"26.3"). El Word escribe así las
+    # cantidades de miles (ej. "Concentrado Producido: +2.325 tms").
+    elif re.match(r'^-?[1-9]\d{0,2}(\.\d{3})+$', s):
+        s = s.replace(".", "")
     else:
         s = s.replace(",", ".")
     partes = s.split(".")

@@ -375,7 +375,9 @@ def _render_fecha_accidente(doc, fecha, texto_resto):
   run_fecha.font.name = "Arial"
   run_fecha.font.size = Pt(11)
   if texto_resto:
-    run_resto = p.add_run(texto_resto)
+    # Pasar por limpiar_texto_global para homogeneizar y asegurar el punto final
+    # (esta ruta arma el párrafo a mano; sin esto la línea queda sin "." final).
+    run_resto = p.add_run(limpiar_texto_global(texto_resto))
     run_resto.bold = False
     run_resto.font.name = "Arial"
     run_resto.font.size = Pt(11)
