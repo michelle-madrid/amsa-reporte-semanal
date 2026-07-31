@@ -12,6 +12,7 @@ from PIL import Image, ImageGrab
 
 import state
 from config import SSO_MARCADOR_TABLA
+from utils.patrones import coincide, debe_ignorar_vinculo, patron_excel
 
 # ── Helpers COM robustos ──────────────────────────────────────────────────────
 # ws_com.Cells(r, c) puede fallar con AttributeError: __call__.Value cuando
@@ -437,43 +438,27 @@ def exportar_imagen_sso_filtrada(ruta_excel, ws_com, rango, nombre_imagen):
 
     return imagen_salida
 
-# Patrón de nombre de archivo esperado por faena (búsqueda case-insensitive).
-_PATRON_EXCEL_FAENA = {
-    "MLP":             "mlp semana",
-    "CEN":             "informe semanal",
-    "ANT":             "informe semana",
-    "CMZ":             "proyectado",
-    "FCAB":            "amsa",
-    "SSO":             "eventos seguridad",
-    "Gestión Hídrica": "seguimiento",
-}
-
-
-# Fragmentos de nombre de archivo que NO deben actualizarse.
-_VINCULOS_IGNORAR = [
-    "cd mina",
-]
-
 def _buscar_excel_en_carpeta(carpeta, patron, clave, carpeta_fallback=None, silencioso=False):
-    """Busca un .xlsx cuyo nombre contenga 'patron'.
+    """Busca un .xlsx cuyo nombre contenga la palabra clave 'patron'.
     Si no lo encuentra, intenta en carpeta_fallback (semana anterior) antes de abrir selector.
     silencioso=True suprime los mensajes de advertencia (usar para faenas no seleccionadas)."""
+    desc = f"'{patron}'" if patron else "un .xlsx único"
     if os.path.isdir(carpeta):
         candidatos = [
             f for f in os.listdir(carpeta)
             if f.lower().endswith(".xlsx")
             and not f.startswith("~$")
-            and patron in f.lower()
+            and coincide(f, patron)
         ]
         if len(candidatos) == 1:
             return os.path.join(carpeta, candidatos[0])
         if len(candidatos) > 1:
             if not silencioso:
-                print(f"  ! {clave}: múltiples coincidencias para '{patron}' en {carpeta} → abriendo selector")
+                print(f"  ! {clave}: múltiples coincidencias para {desc} en {carpeta} → abriendo selector")
             return seleccionar_archivo(f"Excel de {clave}")
         else:
             if not silencioso:
-                print(f"  ! {clave}: no se encontró '{patron}' en {carpeta}")
+                print(f"  ! {clave}: no se encontró {desc} en {carpeta}")
     else:
         if not silencioso:
             print(f"  ! {clave}: carpeta no existe: {carpeta}")
@@ -484,7 +469,7 @@ def _buscar_excel_en_carpeta(carpeta, patron, clave, carpeta_fallback=None, sile
             f for f in os.listdir(str(carpeta_fallback))
             if f.lower().endswith(".xlsx")
             and not f.startswith("~$")
-            and patron in f.lower()
+            and coincide(f, patron)
         ]
         if len(candidatos_fb) == 1:
             ruta = os.path.join(str(carpeta_fallback), candidatos_fb[0])
@@ -510,7 +495,7 @@ def _buscar_excel_en_carpeta(carpeta, patron, clave, carpeta_fallback=None, sile
 def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None, informes_dirs_fallback=None, faenas_seleccionadas=None):
     """
     Para cada vínculo externo:
-    - Si el nombre contiene un fragmento de _VINCULOS_IGNORAR → se omite.
+    - Si el nombre contiene un fragmento a ignorar (patrones.ignorar_vinculos) → se omite.
     - Si la subcarpeta de faena aparece en el path → busca por patrón en esa subcarpeta.
       Si no lo encuentra, intenta en la carpeta equivalente de informes_dirs_fallback (semana anterior).
     - Si nada coincide → abre el explorador.
@@ -527,7 +512,7 @@ def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None, informes_di
             nombre_archivo = os.path.basename(link_origen).lower()
 
             # 1. Ignorar vínculos explícitamente excluidos
-            if any(ignorar in nombre_archivo for ignorar in _VINCULOS_IGNORAR):
+            if debe_ignorar_vinculo(nombre_archivo):
                 print(f"  — omitido: {os.path.basename(link_origen)}")
                 continue
 
@@ -538,7 +523,7 @@ def actualizar_vinculos_faenas(wb, informes_dirs, carpeta_raiz=None, informes_di
             for clave, carpeta_nueva in informes_dirs.items():
                 subcarpeta = os.path.basename(str(carpeta_nueva)).lower()
                 if subcarpeta in link_norm:
-                    patron = _PATRON_EXCEL_FAENA.get(clave, "")
+                    patron = patron_excel(clave)
                     carpeta_fallback = (informes_dirs_fallback or {}).get(clave)
                     es_silencioso = (faenas_seleccionadas is not None and clave not in faenas_seleccionadas)
                     nueva_ruta = _buscar_excel_en_carpeta(str(carpeta_nueva), patron, clave, carpeta_fallback=carpeta_fallback, silencioso=es_silencioso)
@@ -688,16 +673,17 @@ def _cerrar_wb_por_nombre(excel_app, ruta_objetivo, limpiar_cache=False):
 
 
 def _buscar_archivo_eventos_seguridad(carpeta, carpeta_fallback=None):
-    """Localiza el archivo fuente 'eventos seguridad*.xlsx' en la carpeta 06 -SSO.
+    """Localiza el archivo fuente de eventos de seguridad en la carpeta 06 -SSO
+    (palabra clave configurable en el panel; por defecto 'eventos seguridad').
     No abre selector: si no lo encuentra (ni en la semana anterior) devuelve None."""
-    patron = _PATRON_EXCEL_FAENA.get("SSO", "eventos seguridad")
+    patron = patron_excel("SSO")
     for base in (carpeta, carpeta_fallback):
         if base and os.path.isdir(str(base)):
             candidatos = [
                 f for f in os.listdir(str(base))
                 if f.lower().endswith(".xlsx")
                 and not f.startswith("~$")
-                and patron in f.lower()
+                and coincide(f, patron)
             ]
             if len(candidatos) == 1:
                 return os.path.join(str(base), candidatos[0])
@@ -778,7 +764,7 @@ def abrir_excel_y_actualizar_vinculos(ruta_excel, informes_dirs, carpeta_destino
             if ruta_eventos:
                 _ordenar_archivo_eventos_seguridad(ruta_eventos)
             else:
-                print("  ! No se encontró 'eventos seguridad*.xlsx' para ordenar (paso omitido).")
+                print(f"  ! No se encontró un .xlsx con '{patron_excel('SSO')}' para ordenar (paso omitido).")
 
         # Intentar primero con el Excel del usuario (evita problemas de read-only).
         # Hacerlo ANTES de _obtener_excel_app() para que Dispatch encuentre

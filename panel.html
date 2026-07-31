@@ -114,6 +114,23 @@
     font-size: 11px; font-family: monospace; color: var(--gray);
   }
 
+  /* ── Palabras clave de archivos ─────────────────────────────────── */
+  .pat-grid { display: grid; grid-template-columns: 150px 1fr 1fr; gap: 8px 12px; align-items: center; }
+  .pat-grid.cols-2 { grid-template-columns: 150px 1fr; }
+  .pat-head { font-size: 11px; font-weight: 700; text-transform: uppercase;
+              letter-spacing: .6px; color: var(--gray-l); }
+  .pat-lbl  { font-size: 13px; font-weight: 600; color: var(--gray); }
+  .pat-grid input {
+    padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 6px;
+    background: #FAFBFC; color: var(--gray); width: 100%;
+    font-family: "Consolas","Courier New",monospace; font-size: 12px;
+    transition: border-color .2s;
+  }
+  .pat-grid input:focus { outline: none; border-color: var(--teal); background: #fff; }
+  .pat-msg { font-size: 12px; margin-left: 4px; }
+  .pat-msg.ok  { color: var(--ok); }
+  .pat-msg.err { color: var(--err); }
+
   /* ── Path display (config tab) ──────────────────────────────────── */
   .path-box {
     background: #F7F8FA; border: 1.5px solid var(--border); border-radius: 6px;
@@ -716,7 +733,7 @@
           <span class="toggle-slider"></span>
         </label>
         <span class="toggle-label">
-          <strong>SSO</strong> — Base Datos (<code>BDatos*.xlsx</code>) y Descripción de eventos (<code>06 -SSO\</code>)
+          <strong>SSO</strong> — Base Datos (<code id="hint_pat_ind">BDatos*.xlsx</code>) y Descripción de eventos (<code>06 -SSO\</code>)
         </span>
       </div>
 
@@ -728,8 +745,81 @@
           <span class="toggle-slider"></span>
         </label>
         <span class="toggle-label">
-          <strong>Gestión Hídrica</strong> — Seguimiento indicadores (<code>seguimiento*.xlsx</code>, <code>07 -...\</code>)
+          <strong>Gestión Hídrica</strong> — Seguimiento indicadores (<code id="hint_pat_gh">seguimiento*.xlsx</code>, <code>07 -...\</code>)
         </span>
+      </div>
+    </div>
+
+    <!-- Palabras clave con las que se identifican los archivos en disco -->
+    <div class="coll-wrap">
+      <div class="coll-header" id="patronesHeader" onclick="togglePatrones()">
+        <span class="coll-title">🔎 Palabras clave de archivos</span>
+        <span class="coll-hint">Cómo se reconocen los Excel y Word en cada carpeta — clic para editar</span>
+        <span class="coll-arrow" id="patronesArrow">▶</span>
+      </div>
+      <div class="coll-body" id="patronesBody" style="display:none;">
+        <p style="font-size:12px; color:var(--gray-l); margin:10px 0 16px;">
+          Basta con que el nombre del archivo <strong>contenga</strong> la palabra clave
+          (no distingue mayúsculas ni tildes). Se pueden dar varias alternativas separadas
+          por coma — sirve cualquiera de ellas. Si se deja <strong>vacía</strong>, se acepta
+          cualquier archivo de esa extensión, siempre que haya uno solo en la carpeta.
+        </p>
+
+        <div class="pat-grid">
+          <div class="pat-head">Faena</div>
+          <div class="pat-head">Excel vinculado</div>
+          <div class="pat-head">Word fuente</div>
+
+          <div class="pat-lbl">MLP</div>
+          <input type="text" id="pat_excel_MLP"  placeholder="— cualquiera —">
+          <input type="text" id="pat_word_MLP"   placeholder="— cualquiera —">
+
+          <div class="pat-lbl">CEN</div>
+          <input type="text" id="pat_excel_CEN"  placeholder="— cualquiera —">
+          <input type="text" id="pat_word_CEN"   placeholder="— cualquiera —">
+
+          <div class="pat-lbl">ANT</div>
+          <input type="text" id="pat_excel_ANT"  placeholder="— cualquiera —">
+          <input type="text" id="pat_word_ANT"   placeholder="— cualquiera —">
+
+          <div class="pat-lbl">CMZ</div>
+          <input type="text" id="pat_excel_CMZ"  placeholder="— cualquiera —">
+          <input type="text" id="pat_word_CMZ"   placeholder="— cualquiera —">
+
+          <div class="pat-lbl">FCAB</div>
+          <input type="text" id="pat_excel_FCAB" placeholder="— cualquiera —">
+          <input type="text" id="pat_word_FCAB"  placeholder="— cualquiera —">
+        </div>
+
+        <div class="card-subtitle">Otros archivos</div>
+
+        <div class="pat-grid cols-2">
+          <div class="pat-lbl">SSO — eventos</div>
+          <input type="text" id="pat_excel_SSO" placeholder="— cualquiera —"
+                 title="Excel con la descripción de eventos, en 06 -SSO">
+
+          <div class="pat-lbl">SSO — indicadores</div>
+          <input type="text" id="pat_otro_indicadores_sso" placeholder="— cualquiera —"
+                 title="Base de datos de accidentabilidad, en 06 -SSO">
+
+          <div class="pat-lbl">Gestión Hídrica</div>
+          <input type="text" id="pat_excel_GH" placeholder="— cualquiera —"
+                 title="Seguimiento de indicadores, en la carpeta 07">
+
+          <div class="pat-lbl">Excel Base</div>
+          <input type="text" id="pat_otro_excel_madre" placeholder="— cualquiera —"
+                 title="Solo para proponer un archivo cuando el Excel Base no está con el nombre esperado">
+
+          <div class="pat-lbl">Vínculos a ignorar</div>
+          <input type="text" id="pat_ignorar_vinculos" placeholder="— ninguno —"
+                 title="Vínculos externos que NO se actualizan (separar con coma)">
+        </div>
+
+        <div class="btn-row" style="margin-top:18px;">
+          <button class="btn btn-primary" id="btnGuardarPatrones" onclick="guardarPatrones()">Guardar</button>
+          <button class="btn btn-ghost" onclick="restaurarPatrones()">Restaurar por defecto</button>
+          <span class="pat-msg" id="patronesMsg"></span>
+        </div>
       </div>
     </div>
 
@@ -2483,6 +2573,122 @@ function filtrarValidacion(tipo) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Palabras clave de archivos
+// ─────────────────────────────────────────────────────────────────────────────
+const _PAT_FAENAS = ['MLP','CEN','ANT','CMZ','FCAB'];
+
+function togglePatrones() {
+  const body   = document.getElementById('patronesBody');
+  const header = document.getElementById('patronesHeader');
+  const open   = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  header.classList.toggle('open', open);
+}
+
+// Vuelca los patrones del servidor en los inputs del panel.
+function _pintarPatrones(p) {
+  const excel  = p.excel  || {};
+  const word   = p.word   || {};
+  const otros  = p.otros  || {};
+  for (const c of _PAT_FAENAS) {
+    const ie = document.getElementById('pat_excel_' + c);
+    const iw = document.getElementById('pat_word_'  + c);
+    if (ie) ie.value = excel[c] || '';
+    if (iw) iw.value = word[c]  || '';
+  }
+  document.getElementById('pat_excel_SSO').value            = excel['SSO'] || '';
+  document.getElementById('pat_excel_GH').value             = excel['Gestión Hídrica'] || '';
+  document.getElementById('pat_otro_indicadores_sso').value = otros['indicadores_sso'] || '';
+  document.getElementById('pat_otro_excel_madre').value     = otros['excel_madre'] || '';
+  document.getElementById('pat_ignorar_vinculos').value     = p.ignorar_vinculos || '';
+
+  // Refleja las palabras vigentes en las ayudas de "Información disponible"
+  const hintInd = document.getElementById('hint_pat_ind');
+  const hintGH  = document.getElementById('hint_pat_gh');
+  if (hintInd) hintInd.textContent = (otros['indicadores_sso'] || '—') + '*.xlsx';
+  if (hintGH)  hintGH.textContent  = (excel['Gestión Hídrica'] || '—') + '*.xlsx';
+}
+
+// Arma el objeto de patrones a partir de lo escrito en el panel.
+function _leerPatrones() {
+  const excel = {}, word = {};
+  for (const c of _PAT_FAENAS) {
+    excel[c] = document.getElementById('pat_excel_' + c).value.trim();
+    word[c]  = document.getElementById('pat_word_'  + c).value.trim();
+  }
+  excel['SSO']             = document.getElementById('pat_excel_SSO').value.trim();
+  excel['Gestión Hídrica'] = document.getElementById('pat_excel_GH').value.trim();
+  return {
+    excel, word,
+    otros: {
+      indicadores_sso: document.getElementById('pat_otro_indicadores_sso').value.trim(),
+      excel_madre:     document.getElementById('pat_otro_excel_madre').value.trim(),
+    },
+    ignorar_vinculos: document.getElementById('pat_ignorar_vinculos').value.trim(),
+  };
+}
+
+function _patronesMsg(texto, clase) {
+  const el = document.getElementById('patronesMsg');
+  if (!el) return;
+  el.textContent = texto;
+  el.className   = 'pat-msg' + (clase ? ' ' + clase : '');
+  if (texto) setTimeout(() => { if (el.textContent === texto) el.textContent = ''; }, 4000);
+}
+
+// El panel.html se sirve desde disco, así que puede ser más nuevo que el server.py
+// en ejecución. Si el endpoint no existe, hay que reiniciar el servidor.
+const _MSG_SERVER_VIEJO = '✗ Reinicia server.py — el servidor en ejecución es una versión anterior';
+
+async function fetchPatrones() {
+  try {
+    const r = await fetch('/api/patrones');
+    if (r.status === 404) { _patronesMsg(_MSG_SERVER_VIEJO, 'err'); return; }
+    const j = await r.json();
+    if (j.patrones) _pintarPatrones(j.patrones);
+  } catch(e) { /* sin servidor: quedan los campos vacíos */ }
+}
+
+async function guardarPatrones() {
+  const btn = document.getElementById('btnGuardarPatrones');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/patrones', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ patrones: _leerPatrones() })
+    });
+    if (r.status === 404) { _patronesMsg(_MSG_SERVER_VIEJO, 'err'); return; }
+    const j = await r.json();
+    if (j.error) { _patronesMsg('✗ ' + j.error, 'err'); return; }
+    _pintarPatrones(j.patrones || {});
+    _patronesMsg('✓ Guardado — re-detectando archivos…', 'ok');
+    await fetchSemanaInfo();   // vuelve a buscar las rutas con las nuevas palabras
+  } catch(e) {
+    _patronesMsg('✗ Servidor no disponible', 'err');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function restaurarPatrones() {
+  if (!confirm('¿Restaurar las palabras clave a los valores por defecto?')) return;
+  try {
+    const r = await fetch('/api/patrones', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ restaurar: true })
+    });
+    if (r.status === 404) { _patronesMsg(_MSG_SERVER_VIEJO, 'err'); return; }
+    const j = await r.json();
+    if (j.error) { _patronesMsg('✗ ' + j.error, 'err'); return; }
+    _pintarPatrones(j.patrones || {});
+    _patronesMsg('✓ Restaurado', 'ok');
+    await fetchSemanaInfo();
+  } catch(e) {
+    _patronesMsg('✗ Servidor no disponible', 'err');
+  }
+}
+
 function toggleRutas() {
   const body   = document.getElementById('rutasBody');
   const header = document.getElementById('rutasHeader');
@@ -2574,6 +2780,7 @@ function getFaenasActualizar() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('year').value = new Date().getFullYear();
   fetchCalendario();
+  fetchPatrones();
   onDiscoChange();
   onModoWordChange();        // también llama updateRutasVisibility()
 });

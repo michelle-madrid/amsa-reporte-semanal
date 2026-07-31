@@ -1,0 +1,23 @@
+{
+  "excel": {
+    "MLP": "informe",
+    "CEN": "informe semanal",
+    "ANT": "informe semana",
+    "CMZ": "proyectado",
+    "FCAB": "amsa",
+    "SSO": "eventos seguridad",
+    "Gestión Hídrica": "seguimiento"
+  },
+  "word": {
+    "MLP": "",
+    "CEN": "",
+    "ANT": "",
+    "CMZ": "",
+    "FCAB": ""
+  },
+  "otros": {
+    "indicadores_sso": "bdatos",
+    "excel_madre": "semana"
+  },
+  "ignorar_vinculos": "cd mina"
+}

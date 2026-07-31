@@ -924,6 +924,48 @@ def cen_render_medio_ambiente(doc, lineas):
       )
 
 # Renderiza contenido específico dentro del documento Word.
+# Eventos de cronología: líneas que empiezan con una fecha y cuelgan del KPI anterior
+# (ej. "Movimiento Mina: ... Cronología de la contingencia:" seguido de un evento por
+# fecha). En el Word fuente son sub-ítems de lista; no son KPIs, así que hay que
+# conservarlos aparte o se pierden al no calzar con ninguna etiqueta conocida.
+# Tolera: rango ("16 al 18 de julio"), año presente o ausente y hora opcional
+# ("16 de julio de 2026, 6:00 hrs:"). El ":" final es lo que marca el fin de la fecha
+# (no se puede cortar en el primer ":" porque la hora trae el suyo).
+_MESES_ES_PAT = (r"(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|"
+                 r"septiembre|setiembre|octubre|noviembre|diciembre)")
+_PAT_EVENTO_FECHA = re.compile(
+  r"^\d{1,2}(?:\s+(?:al|y)\s+\d{1,2})?"                              # 16   |  16 al 18
+  rf"(?:\s+de)?\s+{_MESES_ES_PAT}"                                   # de julio
+  r"(?:\s+(?:de\s+)?\d{4})?"                                         # de 2026 (opcional)
+  r"(?:\s*,?\s*(?:a\s+las\s+)?\d{1,2}[:.]\d{2}\s*(?:hrs?|h)?\.?)?"   # , 6:00 hrs (opcional)
+  r"\s*:",
+  re.IGNORECASE,
+)
+
+def _mlp_render_evento_cronologia(doc, texto, nivel=2, espacio_despues=6):
+  """Renderiza un evento de la cronología: viñeta del nivel indicado y fecha en negrita."""
+  texto = limpiar_texto_global(texto)
+  p = doc.add_paragraph(style=f"Viñeta {nivel if nivel <= 4 else 4}")
+  p.paragraph_format.line_spacing = 1.0
+  p.paragraph_format.space_before = Pt(0)
+  p.paragraph_format.space_after = Pt(espacio_despues)
+
+  match = _PAT_EVENTO_FECHA.match(texto)
+  fecha = texto[:match.end()].rstrip(":").strip() if match else ""
+  resto = texto[match.end():].strip() if match else texto
+
+  if fecha:
+    run_fecha = p.add_run(f"{fecha}: ")
+    run_fecha.bold = True
+    run_fecha.font.name = "Arial"
+    run_fecha.font.size = Pt(11)
+
+  if resto:
+    run_resto = p.add_run(resto)
+    run_resto.bold = False
+    run_resto.font.name = "Arial"
+    run_resto.font.size = Pt(11)
+
 def mlp_render_mina(doc, texto_compania, excel_madre=None):
   contenido = [linea.strip() for linea in extraer_mina(texto_compania) if linea.strip()]
   if not contenido:
@@ -946,22 +988,45 @@ def mlp_render_mina(doc, texto_compania, excel_madre=None):
   extraccion_mineral = None
   remanejo = None
 
+  # Eventos de cronología por KPI y líneas que no calzan con ningún KPI conocido.
+  eventos = {}
+  kpi_actual = None
+  omitidas = []
+
   for texto in contenido:
     clave = normalizar_texto_clave(texto)
 
     if clave.startswith("movimiento mina"):
       movimiento_mina = texto
+      kpi_actual = "movimiento"
     elif clave.startswith("total extraccion") or clave.startswith("extraccion:"):
       extraccion = re.sub(r"^Total Extracción", "Extracción", texto, count=1)
+      kpi_actual = "extraccion"
     elif clave.startswith("extraccion esteril"):
       extraccion_lastre = re.sub(r"^Extracción Estéril", "Extracción Lastre", texto, count=1)
+      kpi_actual = "lastre"
     elif clave.startswith("extraccion mineral"):
       extraccion_mineral = texto
+      kpi_actual = "mineral"
     elif clave.startswith("remanejo"):
       remanejo = texto
+      kpi_actual = "remanejo"
+    elif kpi_actual and _PAT_EVENTO_FECHA.match(limpiar_texto_global(texto)):
+      eventos.setdefault(kpi_actual, []).append(texto)
+    else:
+      omitidas.append(texto)
 
   if not movimiento_mina:
     print("[REVISAR][MLP] Corregir: No se encontró la línea 'Movimiento Mina' en el informe original.")
+
+  for texto in omitidas:
+    resumen = texto if len(texto) <= 90 else texto[:87] + "..."
+    print(f"[REVISAR][MLP] Mina: línea sin KPI reconocido, no se incluyó → {resumen}")
+
+  def _render_eventos(kpi, nivel=2):
+    """Escribe, bajo el KPI recién renderizado, los eventos de su cronología."""
+    for evento in eventos.get(kpi, []):
+      _mlp_render_evento_cronologia(doc, evento, nivel=nivel)
 
   if movimiento_mina:
     movimiento_mina = limpiar_texto_global(movimiento_mina)
@@ -981,17 +1046,23 @@ def mlp_render_mina(doc, texto_compania, excel_madre=None):
       run_normal.font.name = "Arial"
       run_normal.font.size = Pt(11)
 
+    _render_eventos("movimiento", nivel=2)
+
   if extraccion:
     agregar_viñeta(doc, extraccion, nivel=2, espacio_despues=6)
+    _render_eventos("extraccion", nivel=2)
 
     if extraccion_lastre:
       agregar_viñeta(doc, _quitar_dos_puntos_inicio(extraccion_lastre), nivel=3, espacio_despues=6)
+      _render_eventos("lastre", nivel=2)
 
     if extraccion_mineral:
       agregar_viñeta(doc, _quitar_dos_puntos_inicio(extraccion_mineral), nivel=3, espacio_despues=6)
+      _render_eventos("mineral", nivel=2)
 
   if remanejo:
     agregar_viñeta(doc, remanejo, nivel=2, espacio_despues=6)
+    _render_eventos("remanejo", nivel=2)
 
 # Devuelve el set de textos (p.text.strip()) de párrafos que son ítems de lista con
 # numeración/viñeta de Word (w:numPr) en el Word fuente. La numeración automática no

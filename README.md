@@ -80,6 +80,20 @@ N:\01 Reporting\09 Informe Semanal\
 
 Si la semana cruza dos meses se busca primero en la carpeta del mes de cierre y luego en la del mes de inicio.
 
+### Palabras clave para identificar los archivos
+
+Dentro de cada carpeta el archivo se reconoce por una palabra clave contenida en su nombre
+(por ejemplo `mlp semana` para el Excel de MLP o `bdatos` para los indicadores SSO). Los valores
+de fábrica están en `utils/patrones.py` (`PATRONES_DEFAULT`) y se editan desde el panel, en
+**Configuración → 🔎 Palabras clave de archivos**; lo que se guarda queda en `patrones.json`
+en la raíz del proyecto (borrarlo devuelve todo a los valores por defecto).
+
+- La comparación no distingue mayúsculas ni tildes y basta con que el nombre *contenga* la palabra.
+- Se admiten varias alternativas separadas por coma: calza cualquiera de ellas.
+- Palabra clave vacía = sin filtro; se toma el archivo solo si hay uno de esa extensión en la carpeta.
+- El Word de cada faena viene sin palabra clave: por defecto se usa el único `.docx` de la carpeta.
+- `ignorar_vinculos` lista los vínculos externos que nunca se actualizan (por defecto `cd mina`).
+
 ### Estructura del documento generado
 
 El Word se construye en este orden:
@@ -201,6 +215,7 @@ Analiza el Word párrafo a párrafo combinando dos motores:
 | `utils/excel_utils.py` | COM Excel, exportación de imágenes, actualización de vínculos, lectura de acumulados por compañía |
 | `utils/word_utils.py` | Escritura y formato de párrafos, viñetas, imágenes en Word |
 | `utils/text_utils.py` | Normalización y limpieza de texto, inserción de NBSP, detección de fechas |
+| `utils/patrones.py` | Palabras clave con que se identifican los Excel/Word en disco (defaults + `patrones.json`) |
 
 ---
 

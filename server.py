@@ -98,7 +98,7 @@ def api_semana_info():
     d = request.json
     try:
         from config import construir_rutas_semana
-        from utils.excel_utils import _PATRON_EXCEL_FAENA
+        from utils.patrones import archivos_que_calzan, patron_excel, patron_otro, patron_word
 
         from datetime import date, timedelta
         disco = d.get("disco") or None
@@ -162,73 +162,60 @@ def api_semana_info():
 
         for clave, sub in rutas["informes_dirs"].items():
             sub = Path(sub)
-            # Word — semana actual
-            docxs = [f for f in sub.glob("*.docx") if not f.name.startswith("~$")] if sub.is_dir() else []
+            # Word — semana actual (palabra clave configurable; vacía = cualquier .docx)
+            pat_word = patron_word(clave)
+            docxs = archivos_que_calzan(sub, ".docx", pat_word)
             informes[clave] = str(docxs[0]) if len(docxs) == 1 else ""
             # Word — fallback semana anterior
             if not informes[clave]:
                 sub_ant = Path(dirs_ant[clave]) if clave in dirs_ant else None
-                if sub_ant and sub_ant.is_dir():
-                    docxs_ant = [f for f in sub_ant.glob("*.docx") if not f.name.startswith("~$")]
-                    if len(docxs_ant) == 1:
-                        informes[clave] = str(docxs_ant[0])
-                        if clave not in fallback_anterior:
-                            fallback_anterior.append(clave)
+                docxs_ant = archivos_que_calzan(sub_ant, ".docx", pat_word)
+                if len(docxs_ant) == 1:
+                    informes[clave] = str(docxs_ant[0])
+                    if clave not in fallback_anterior:
+                        fallback_anterior.append(clave)
             # Excel vinculado (faenas principales)
-            patron = _PATRON_EXCEL_FAENA.get(clave, "").lower()
-            if patron and sub.is_dir():
-                cands = [f for f in sub.glob("*.xlsx")
-                         if not f.name.startswith("~$") and patron in f.name.lower()]
-                excels_faena[clave] = str(cands[0]) if len(cands) == 1 else ""
-            else:
-                excels_faena[clave] = ""
+            patron = patron_excel(clave)
+            cands = archivos_que_calzan(sub, ".xlsx", patron)
+            excels_faena[clave] = str(cands[0]) if len(cands) == 1 else ""
             # Excel — fallback semana anterior
-            if not excels_faena[clave] and patron:
+            if not excels_faena[clave]:
                 sub_ant = Path(dirs_ant[clave]) if clave in dirs_ant else None
-                if sub_ant and sub_ant.is_dir():
-                    cands_ant = [f for f in sub_ant.glob("*.xlsx")
-                                 if not f.name.startswith("~$") and patron in f.name.lower()]
-                    if len(cands_ant) == 1:
-                        excels_faena[clave] = str(cands_ant[0])
-                        if clave not in fallback_anterior:
-                            fallback_anterior.append(clave)
+                cands_ant = archivos_que_calzan(sub_ant, ".xlsx", patron)
+                if len(cands_ant) == 1:
+                    excels_faena[clave] = str(cands_ant[0])
+                    if clave not in fallback_anterior:
+                        fallback_anterior.append(clave)
 
         # Excels adicionales: SSO y Gestión Hídrica
         for clave, adir in rutas.get("excels_adicionales_dirs", {}).items():
             adir = Path(adir)
-            patron = _PATRON_EXCEL_FAENA.get(clave, "").lower()
-            if patron and adir.is_dir():
-                cands = [f for f in adir.glob("*.xlsx")
-                         if not f.name.startswith("~$") and patron in f.name.lower()]
-                excels_faena[clave] = str(cands[0]) if len(cands) == 1 else ""
-            else:
-                excels_faena[clave] = ""
+            patron = patron_excel(clave)
+            cands = archivos_que_calzan(adir, ".xlsx", patron)
+            excels_faena[clave] = str(cands[0]) if len(cands) == 1 else ""
             # Fallback semana anterior
-            if not excels_faena[clave] and patron:
+            if not excels_faena[clave]:
                 adir_ant = Path(dirs_ant[clave]) if clave in dirs_ant else None
-                if adir_ant and adir_ant.is_dir():
-                    cands_ant = [f for f in adir_ant.glob("*.xlsx")
-                                 if not f.name.startswith("~$") and patron in f.name.lower()]
-                    if len(cands_ant) == 1:
-                        excels_faena[clave] = str(cands_ant[0])
-                        if clave not in fallback_anterior:
-                            fallback_anterior.append(clave)
+                cands_ant = archivos_que_calzan(adir_ant, ".xlsx", patron)
+                if len(cands_ant) == 1:
+                    excels_faena[clave] = str(cands_ant[0])
+                    if clave not in fallback_anterior:
+                        fallback_anterior.append(clave)
 
-        # Excel de Indicadores SSO: BDatos*.xlsx en 06 -SSO (con fallback semana anterior)
-        cands_ind = list(ind_dir.glob("BDatos*.xlsx")) if ind_dir.is_dir() else []
+        # Excel de Indicadores SSO en 06 -SSO (con fallback semana anterior)
+        pat_ind = patron_otro("indicadores_sso")
+        cands_ind = archivos_que_calzan(ind_dir, ".xlsx", pat_ind)
         excel_ind = str(cands_ind[0]) if len(cands_ind) == 1 else ""
         if not excel_ind and "SSO" in dirs_ant:
-            sso_ant = Path(dirs_ant["SSO"])
-            if sso_ant.is_dir():
-                cands_ant = [f for f in sso_ant.glob("BDatos*.xlsx")]
-                if len(cands_ant) == 1:
-                    excel_ind = str(cands_ant[0])
-                    if "SSO" not in fallback_anterior:
-                        fallback_anterior.append("SSO")
+            cands_ant = archivos_que_calzan(dirs_ant["SSO"], ".xlsx", pat_ind)
+            if len(cands_ant) == 1:
+                excel_ind = str(cands_ant[0])
+                if "SSO" not in fallback_anterior:
+                    fallback_anterior.append("SSO")
 
         excel_madre_candidato = None
-        if not excel_madre.is_file() and excel_madre.parent.is_dir():
-            cands = [f for f in excel_madre.parent.glob("Semana *.xlsx") if not f.name.startswith("~$")]
+        if not excel_madre.is_file():
+            cands = archivos_que_calzan(excel_madre.parent, ".xlsx", patron_otro("excel_madre"))
             if cands:
                 excel_madre_candidato = str(cands[0])
 
@@ -249,6 +236,27 @@ def api_semana_info():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+# ── Palabras clave para identificar archivos ─────────────────────────────────
+@app.route("/api/patrones", methods=["GET"])
+def api_patrones_get():
+    from utils.patrones import PATRONES_DEFAULT, cargar_patrones
+    return jsonify({"patrones": cargar_patrones(), "defaults": PATRONES_DEFAULT})
+
+@app.route("/api/patrones", methods=["POST"])
+def api_patrones_post():
+    from utils.patrones import guardar_patrones, restaurar_patrones
+    d = request.json or {}
+    try:
+        if d.get("restaurar"):
+            patrones = restaurar_patrones()
+            print("[INFO] Palabras clave de archivos restauradas a los valores por defecto")
+        else:
+            patrones = guardar_patrones(d.get("patrones") or {})
+            print("[INFO] Palabras clave de archivos actualizadas")
+        return jsonify({"ok": True, "patrones": patrones})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ── Calendario de semanas ─────────────────────────────────────────────────────
 @app.route("/api/calendario")
@@ -421,6 +429,30 @@ def _task(fn, data):
     except: print(f"\n[ERROR]\n{traceback.format_exc()}")
     finally: _stop_cap(); _running = False; pythoncom.CoUninitialize()
 
+# ── Recarga de módulos ────────────────────────────────────────────────────────
+# El panel.html se lee de disco en cada request, pero los módulos Python quedan
+# cacheados en sys.modules desde el primer import: sin esto, editar un renderer y
+# volver a generar seguía usando el código viejo hasta reiniciar server.py.
+# Se recargan en orden de dependencia. `state` NO se recarga: guarda los libros
+# Excel abiertos y la lista de errores de la corrida.
+_MODULOS_RECARGA = [
+    "config",
+    "utils.patrones", "utils.text_utils", "utils.word_utils",
+    "utils.excel_utils", "utils.notas_pie",
+    "core.extractores", "core.siglas", "core.renderers", "core.validador",
+]
+
+def _recargar_modulos():
+    """Recarga los módulos del proyecto para tomar cambios de código sin reiniciar."""
+    for nombre in _MODULOS_RECARGA:
+        mod = sys.modules.get(nombre)
+        if mod is None:
+            continue
+        try:
+            importlib.reload(mod)
+        except Exception as e:
+            print(f"  ! No se pudo recargar {nombre}: {e}")
+
 # ── Implementación: Generar ───────────────────────────────────────────────────
 _path_overrides: dict = {}
 
@@ -446,6 +478,9 @@ def _mock_input(responses: list):
 
 def _generar(d):
     global _path_overrides
+
+    # Antes de cualquier import/parcheo: deja los módulos en su versión de disco.
+    _recargar_modulos()
 
     raiz_override = (d.get("raiz_override") or "").strip() or None
     disco         = d.get("disco") or None
@@ -617,6 +652,7 @@ def _verificar_documento(ruta_docx):
 
 # ── Implementación: Validar ───────────────────────────────────────────────────
 def _validar(d):
+    _recargar_modulos()
     ruta_word  = d.get("ruta_word",  "").strip()
     ruta_excel = d.get("ruta_excel", "").strip()
     faenas     = d.get("faenas") or None   # None → valida todo
@@ -632,8 +668,9 @@ def _validar(d):
         msg = f"Word no encontrado: {ruta_word}"
         print(f"[ERROR] {msg}"); register_error(msg); return
     if not Path(ruta_excel).is_file():
+        from utils.patrones import archivos_que_calzan, patron_otro
         carpeta = Path(ruta_excel).parent
-        candidatos = [f for f in carpeta.glob("Semana *.xlsx") if not f.name.startswith("~$")]
+        candidatos = archivos_que_calzan(carpeta, ".xlsx", patron_otro("excel_madre"))
         if candidatos:
             from core.validador import register_rename_suggestion
             register_rename_suggestion(str(candidatos[0]), ruta_excel)

@@ -18,6 +18,7 @@ from utils.excel_utils import _obtener_excel_app, _rangos_tablas_sso_backup_dina
 from state import _workbooks_abiertos
 from core.validador import validar_kpis_vs_excel
 from utils.notas_pie import extraer_notas_al_pie, aplicar_notas_al_pie
+from utils.patrones import archivos_que_calzan, patron_otro, patron_word
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -665,38 +666,42 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
         print(f"  ! {mensaje}: no encontrado en ruta esperada → abriendo selector")
         return seleccionar_archivo(mensaje)
 
-    def _resolver_unico_docx(carpeta, mensaje):
-        """Busca un único .docx en la carpeta; si hay exactamente uno lo usa, si no abre selector."""
-        carpeta = Path(carpeta)
-        if carpeta.is_dir():
-            docxs = [f for f in carpeta.glob("*.docx") if not f.name.startswith("~$")]
-            if len(docxs) == 1:
-                print(f"  ✓ {mensaje}: {docxs[0].name}")
-                return str(docxs[0])
-            if len(docxs) > 1:
-                print(f"  ! {mensaje}: {len(docxs)} archivos .docx encontrados → abriendo selector")
-        else:
+    def _resolver_unico_docx(carpeta, mensaje, clave=None):
+        """Busca en la carpeta el .docx que calce con la palabra clave de la faena
+        (configurable en el panel; vacía = cualquier .docx). Si hay exactamente uno
+        lo usa, si no abre selector."""
+        patron = patron_word(clave) if clave else ""
+        docxs = archivos_que_calzan(carpeta, ".docx", patron)
+        if not Path(carpeta).is_dir():
             print(f"  ! {mensaje}: carpeta no encontrada → abriendo selector")
+        elif len(docxs) == 1:
+            print(f"  ✓ {mensaje}: {docxs[0].name}")
+            return str(docxs[0])
+        elif len(docxs) > 1:
+            print(f"  ! {mensaje}: {len(docxs)} archivos .docx encontrados → abriendo selector")
+        elif patron:
+            print(f"  ! {mensaje}: ningún .docx contiene '{patron}' → abriendo selector")
         return seleccionar_archivo(mensaje)
 
     def _resolver_unico_xlsx(carpeta, mensaje, override=None):
-        """Busca un .xlsx que empiece con 'BDatos' en la carpeta; si no abre selector.
+        """Busca el .xlsx de indicadores SSO por su palabra clave (configurable en el
+        panel, por defecto 'BDatos'); si no lo encuentra abre selector.
         Si el panel indicó una ruta (override), esa tiene prioridad."""
         if override and Path(override).is_file():
             print(f"  ✓ (ruta del panel) {mensaje}: {Path(override).name}")
             return str(override)
-        carpeta = Path(carpeta)
-        if carpeta.is_dir():
-            candidatos = [f for f in carpeta.glob("BDatos*.xlsx") if not f.name.startswith("~$")]
-            if len(candidatos) == 1:
-                print(f"  ✓ {mensaje}: {candidatos[0].name}")
-                return str(candidatos[0])
-            if len(candidatos) > 1:
-                print(f"  ! {mensaje}: {len(candidatos)} archivos BDatos*.xlsx encontrados → abriendo selector")
-            else:
-                print(f"  ! {mensaje}: no se encontró BDatos*.xlsx en {carpeta} → abriendo selector")
-        else:
+        patron = patron_otro("indicadores_sso")
+        desc = f"'{patron}'" if patron else "un .xlsx único"
+        candidatos = archivos_que_calzan(carpeta, ".xlsx", patron)
+        if not Path(carpeta).is_dir():
             print(f"  ! {mensaje}: carpeta no encontrada → abriendo selector")
+        elif len(candidatos) == 1:
+            print(f"  ✓ {mensaje}: {candidatos[0].name}")
+            return str(candidatos[0])
+        elif len(candidatos) > 1:
+            print(f"  ! {mensaje}: {len(candidatos)} archivos con {desc} encontrados → abriendo selector")
+        else:
+            print(f"  ! {mensaje}: no se encontró {desc} en {carpeta} → abriendo selector")
         return seleccionar_archivo(mensaje)
 
     if MODO_DEBUG:
@@ -753,7 +758,7 @@ def generar_informe(nombre_override=None, incluir_sso=True, incluir_gh=True,
     for clave in orden_oficial:
         if clave in faenas_activas:
             if MODO_DEBUG:
-                ruta = _resolver_unico_docx(rutas["informes_dirs"][clave], f"Informe {clave}")
+                ruta = _resolver_unico_docx(rutas["informes_dirs"][clave], f"Informe {clave}", clave=clave)
             else:
                 ruta = seleccionar_archivo(f"Informe {clave}")
             rutas_word[clave] = ruta

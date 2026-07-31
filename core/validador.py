@@ -205,6 +205,17 @@ _BULLETS = set('·•‣▸▹►-–—*')
 # cuando va seguido de espacio, para no romper palabras como "oxidación".
 _BULLET_PREFIX = re.compile(r'^(?:[\s·•‣▸▹►○*​﻿]+|[o\-–—]\s+)+')
 
+# Línea que arranca con una fecha en texto ("16 de julio de 2026, 6:00 hrs: ...",
+# "16 al 18 de julio: ..."). Son párrafos narrativos —cronologías de contingencia,
+# hitos— y no KPIs: se exige el nombre del mes para no descartar líneas que
+# simplemente empiecen con un número.
+_PAT_LINEA_FECHA = re.compile(
+    r'^\d{1,2}(?:\s+(?:al|y)\s+\d{1,2})?(?:\s+de)?\s+'
+    r'(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|'
+    r'septiembre|setiembre|octubre|noviembre|diciembre)\b',
+    re.IGNORECASE,
+)
+
 def _extraer_label(linea):
     """
     Extrae la parte de texto (etiqueta KPI) al inicio de una línea, antes del primer número.
@@ -804,6 +815,12 @@ def _comparar_y_reportar(clave, label_sec, lineas, tabla_excel):
         if linea_norm in _subsecciones:
             contexto_suffix = _subsecciones[linea_norm]
             print(f"\n    [contexto: {contexto_suffix}]")
+            continue
+
+        # Líneas narrativas que empiezan con una fecha (ej. la cronología de la
+        # contingencia que MLP manda dentro de Mina): no son KPIs y no tienen
+        # celda en el Excel; sus números son horas y códigos de fase.
+        if _PAT_LINEA_FECHA.match(_BULLET_PREFIX.sub('', linea.strip())):
             continue
 
         # Extraer números solo del segmento de desviación (antes del status)

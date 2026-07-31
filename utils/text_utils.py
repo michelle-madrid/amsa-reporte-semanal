@@ -331,12 +331,14 @@ def limpiar_texto_global(texto):
   # (ej. "583-PP-7001"): el guion pegado a una letra/dígito indica un tag, no una cantidad.
   # Y se excluyen números de documento/resolución precedidos por "N°" / "Nº"
   # (ej. "Ord N°1678"): son identificadores, no cantidades.
+  # Igual con los stocks de mina (ej. "PA03 desde stock 3080"): el número nombra
+  # el stock, no una cantidad, y con coma se leería como tonelaje.
   def _sep_miles(m):
     n = int(m.group(0))
     if 1900 <= n <= 2099:
       return m.group(0)
     return f"{n:,}"
-  texto = re.sub(r'(?<!ID )(?<!ID: )(?<!\w-)(?<!°)(?<!º)(?<!° )(?<!º )\b\d{4,}\b(?!-\w)', _sep_miles, texto, flags=re.IGNORECASE)
+  texto = re.sub(r'(?<!ID )(?<!ID: )(?<!stock )(?<!\w-)(?<!°)(?<!º)(?<!° )(?<!º )\b\d{4,}\b(?!-\w)', _sep_miles, texto, flags=re.IGNORECASE)
 
   # normalizar "plan mensual" (cualquier capitalización) → "Plan Mensual"
   # corregir 'Esteril' sin tilde
