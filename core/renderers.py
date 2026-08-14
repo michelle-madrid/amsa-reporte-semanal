@@ -34,6 +34,59 @@ def construir_bloque_faena(doc, clave, texto_word, excel_madre, orden_secciones=
     if proc:
         proc(doc, texto_word, excel_madre)
 
+# ── Jerarquía de viñetas del Word fuente ────────────────────────────────────
+# extraer_texto_word aplana el informe a texto plano (p.text), así que el nivel
+# de anidamiento de cada viñeta del original se pierde. Estos helpers lo
+# recuperan re-leyendo el Word fuente (state.ruta_word_actual), igual que
+# _textos_numerados_word hace con la numeración automática. Sirve para conservar
+# la indentación extra que el redactor le dio a ciertos ítems —p. ej. los
+# eventos que cuelgan de "Eventos reportados a la SMA."—, sin la cual no se
+# entiende a qué evento se refiere cada fecha.
+
+_PAT_MARCADOR_VINETA = re.compile(r"^(?:[•○·‣▸▹►*​﻿]+\s*|[o\-–—]\s+)+")
+
+def _clave_nivel(texto):
+  """Clave para cruzar una línea del informe aplanado con su párrafo del Word
+  fuente: mismo texto, sin marcador de viñeta manual ni espacios sobrantes."""
+  return _PAT_MARCADOR_VINETA.sub("", (texto or "").strip()).strip()
+
+# Sangría (twips) entre un nivel de viñeta y el siguiente. Solo se usa como
+# respaldo cuando el párrafo no es una lista de Word sino viñetas a mano.
+_TWIPS_POR_NIVEL = 360
+
+def _niveles_lista_word(ruta_word):
+  """Devuelve {texto_normalizado: nivel} con el nivel de viñeta de cada párrafo
+  del Word fuente. Prefiere el w:ilvl de la lista; si el párrafo no es lista,
+  deriva el nivel de la sangría izquierda. Los párrafos sin ninguna de las dos
+  señales quedan fuera del mapa (nivel desconocido, no nivel 0)."""
+  if not ruta_word or not os.path.isfile(ruta_word):
+    return {}
+  try:
+    doc = Document(ruta_word)
+  except Exception:
+    return {}
+  W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+  niveles = {}
+  for p in doc.paragraphs:
+    clave = _clave_nivel(p.text)
+    pPr = p._p.find(f"{W}pPr")
+    if not clave or clave in niveles or pPr is None:
+      continue
+    nivel = None
+    numPr = pPr.find(f"{W}numPr")
+    if numPr is not None:
+      ilvl = numPr.find(f"{W}ilvl")
+      val = ilvl.get(f"{W}val") if ilvl is not None else None
+      nivel = int(val) if val and val.lstrip("-").isdigit() else 0
+    else:
+      ind = pPr.find(f"{W}ind")
+      left = ind.get(f"{W}left") if ind is not None else None
+      if left and left.lstrip("-").isdigit():
+        nivel = max(0, round(int(left) / _TWIPS_POR_NIVEL))
+    if nivel is not None:
+      niveles[clave] = nivel
+  return niveles
+
 # Renderiza contenido específico dentro del documento Word.
 def mlp_render_medio_ambiente(doc, lineas):
   subtitulo_actual = None
@@ -44,10 +97,18 @@ def mlp_render_medio_ambiente(doc, lineas):
   patron_fecha = re.compile(r"^\d{1,2}\sde\s\w+(?:\sde)?\s\d{4}")
   patron_n_eventos = re.compile(r"^(\d+)\s+evento", re.IGNORECASE)
 
+  # Nivel que tenía en el Word fuente la última viñeta renderizada al primer
+  # nivel: cualquier línea que en el original venga más adentro que ella cuelga
+  # de ella y se renderiza un nivel más adentro (ver _niveles_lista_word).
+  niveles_fuente = _niveles_lista_word(state.ruta_word_actual)
+  nivel_fuente_padre = None
+
   for linea in lineas:
     texto = linea.strip()
     if not texto:
       continue
+
+    nivel_fuente = niveles_fuente.get(_clave_nivel(texto))
 
     texto_limpio = re.sub(r"^(o\s+|[•·\-\s]+)", "", texto).strip()
     texto_limpio = limpiar_texto_global(texto_limpio)
@@ -66,6 +127,7 @@ def mlp_render_medio_ambiente(doc, lineas):
       dentro_de_fecha = False
       eventos_anunciados = 0
       eventos_renderizados = 0
+      nivel_fuente_padre = None
       continue
 
     # "N evento(s)..." — detectar ANTES de es_subtitulo porque puede no tener ":"
@@ -77,6 +139,7 @@ def mlp_render_medio_ambiente(doc, lineas):
       eventos_anunciados = int(m_n.group(1))
       eventos_renderizados = 0
       dentro_de_fecha = False
+      nivel_fuente_padre = nivel_fuente
       continue
 
     es_subtitulo = (
@@ -95,6 +158,7 @@ def mlp_render_medio_ambiente(doc, lineas):
       dentro_de_fecha = False
       eventos_anunciados = 0
       eventos_renderizados = 0
+      nivel_fuente_padre = nivel_fuente
       continue
 
     # Encabezado corto que termina en ":" → viñeta sin negrita
@@ -105,12 +169,26 @@ def mlp_render_medio_ambiente(doc, lineas):
       eventos_anunciados = 0
       eventos_renderizados = 0
       dentro_de_fecha = False
+      if nivel == 2:
+        nivel_fuente_padre = nivel_fuente
       continue
 
     # Determinar si aún quedan eventos anunciados por renderizar
     en_nivel_profundo = subtitulo_actual and (
       eventos_anunciados == 0 or eventos_renderizados < eventos_anunciados
     )
+
+    # …o si en el Word fuente esta línea venía más adentro que la viñeta de
+    # primer nivel que la precede. Cubre encabezados que no calzan con las
+    # reglas de subtítulo de arriba porque terminan en "." (ej. "Eventos
+    # reportados a la SMA.") y cuyos eventos, sin esto, quedarían al mismo
+    # nivel que el resto y no se sabría de qué evento habla cada fecha.
+    if (
+      nivel_fuente is not None
+      and nivel_fuente_padre is not None
+      and nivel_fuente > nivel_fuente_padre
+    ):
+      en_nivel_profundo = True
 
     if texto_limpio.startswith("Calidad del aire"):
       # "Calidad del aire" siempre va al primer nivel de viñeta (como "Reporte
@@ -120,6 +198,7 @@ def mlp_render_medio_ambiente(doc, lineas):
       subtitulo_actual = None
       eventos_anunciados = 0
       eventos_renderizados = 0
+      nivel_fuente_padre = nivel_fuente
       agregar_viñeta_sin_negrita(doc, texto_limpio, nivel=2, espacio_despues=6)
       continue
 
@@ -132,6 +211,8 @@ def mlp_render_medio_ambiente(doc, lineas):
       agregar_viñeta_fecha_inicial(doc, texto_limpio, nivel=nivel_fecha, espacio_despues=6)
       if en_nivel_profundo:
         eventos_renderizados += 1
+      else:
+        nivel_fuente_padre = nivel_fuente
 
     elif dentro_de_fecha:
       p = doc.add_paragraph(style="Normal AMSA")
@@ -152,6 +233,7 @@ def mlp_render_medio_ambiente(doc, lineas):
         agregar_viñeta(doc, texto_limpio, nivel=3, espacio_despues=6)
       else:
         agregar_viñeta(doc, texto_limpio, nivel=2, espacio_despues=6)
+        nivel_fuente_padre = nivel_fuente
 
 # Inserta la sección de estado de fases de desarrollo con imagen y criterios.
 def agregar_estado_fases_desarrollo(doc, excel_madre):

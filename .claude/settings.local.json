@@ -3,7 +3,33 @@
     "allow": [
       "Bash(python -c \"import utils.excel_utils; import main\")",
       "PowerShell(python \"c:\\\\Temp\\\\fix_nbsp_section2.py\")",
-      "PowerShell(cd \"c:\\\\Users\\\\amsmmadrida\\\\Repositorios Personales Control Gestion\\\\amsa-reporte-semanal\"; git diff 55857b2..HEAD -- main.py)"
+      "PowerShell(cd \"c:\\\\Users\\\\amsmmadrida\\\\Repositorios Personales Control Gestion\\\\amsa-reporte-semanal\"; git diff 55857b2..HEAD -- main.py)",
+      "Bash(ls -d /c/Users/amsmmadrida/AppData/Local/Programs/Python/* /c/Python* /c/ProgramData/Anaconda3 /c/Users/amsmmadrida/AppData/Local/Microsoft/WindowsApps/python*.exe 2>/dev/null; echo \"--- fin ---\")",
+      "Read(//c/Users/amsmmadrida/AppData/Local/Programs/**)",
+      "Bash(ls -l /c/Users/amsmmadrida/AppData/Local/Microsoft/WindowsApps/python*.exe)",
+      "Read(//c/Users/amsmmadrida/AppData/Local/Microsoft/WindowsApps/**)",
+      "Bash(ls -d \"/c/Program Files/Python\"* \"/c/Program Files \\(x86\\)/Python\"* /c/tools/python* /c/Users/amsmmadrida/anaconda3 /c/Users/amsmmadrida/miniconda3 /c/Users/amsmmadrida/AppData/Local/Programs/Python 2>/dev/null; echo \"--- fin busqueda ---\")",
+      "Read(//c/Program Files/**)",
+      "Bash(ls -l \"/c/Program Files/WindowsApps/PythonSoftwareFoundation.PythonManager_26.3.240.0_x64__qbz5n2kfra8p0/\" 2>&1 | head -30; echo \"=== pymanager runtimes ===\"; ls -d /c/Users/amsmmadrida/AppData/Local/Python/pymanager/* 2>/dev/null; echo \"--- fin ---\")",
+      "Read(//c/Program Files/WindowsApps/PythonSoftwareFoundation.PythonManager_26.3.240.0_x64__qbz5n2kfra8p0//**)",
+      "Read(//c/Users/amsmmadrida/AppData/Local/Python/**)",
+      "Read(//c/Users/amsmmadrida/**)",
+      "Bash(\"/c/Program Files/WindowsApps/PythonSoftwareFoundation.PythonManager_26.3.240.0_x64__qbz5n2kfra8p0/py.exe\" list)",
+      "Bash(\"/c/Program Files/WindowsApps/PythonSoftwareFoundation.PythonManager_26.3.240.0_x64__qbz5n2kfra8p0/py.exe\" install 3.13)",
+      "Read(//c/Users/amsmmadrida/AppData/Local/Python/bin/**)",
+      "Bash(/c/Users/amsmmadrida/AppData/Local/Python/bin/python.exe --version)",
+      "Bash(py --version)",
+      "Bash(reg query *)",
+      "Bash(sed 's/REG_[A-Z_]*  *//')",
+      "Bash(python -m pip install -r requirements.txt)",
+      "Bash(python server.py)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" --max-time 15 http://localhost:5000)",
+      "Bash(PYTHONUTF8=1 python server.py)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" --max-time 20 http://localhost:5000)",
+      "Bash(ls \"N:/01 Reporting/09 Informe Semanal\" 2>&1 | head -30)",
+      "Read(//n/01 Reporting/**)",
+      "Bash(./.venv/Scripts/python.exe \"C:/Users/AMSMMA~1/AppData/Local/Temp/claude/c--Users-amsmmadrida-Repositorios-Control-Gesti-n-amsa-reporte-semanal/afac2cfb-d11b-422c-bcfd-c30277d9c0c6/scratchpad/test_ma.py\")",
+      "Bash(./.venv/Scripts/python.exe \"C:/Users/AMSMMA~1/AppData/Local/Temp/claude/c--Users-amsmmadrida-Repositorios-Control-Gesti-n-amsa-reporte-semanal/afac2cfb-d11b-422c-bcfd-c30277d9c0c6/scratchpad/test_regresion.py\")"
     ]
   }
 }
