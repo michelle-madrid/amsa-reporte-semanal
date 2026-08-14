@@ -29,7 +29,11 @@
       "Bash(ls \"N:/01 Reporting/09 Informe Semanal\" 2>&1 | head -30)",
       "Read(//n/01 Reporting/**)",
       "Bash(./.venv/Scripts/python.exe \"C:/Users/AMSMMA~1/AppData/Local/Temp/claude/c--Users-amsmmadrida-Repositorios-Control-Gesti-n-amsa-reporte-semanal/afac2cfb-d11b-422c-bcfd-c30277d9c0c6/scratchpad/test_ma.py\")",
-      "Bash(./.venv/Scripts/python.exe \"C:/Users/AMSMMA~1/AppData/Local/Temp/claude/c--Users-amsmmadrida-Repositorios-Control-Gesti-n-amsa-reporte-semanal/afac2cfb-d11b-422c-bcfd-c30277d9c0c6/scratchpad/test_regresion.py\")"
+      "Bash(./.venv/Scripts/python.exe \"C:/Users/AMSMMA~1/AppData/Local/Temp/claude/c--Users-amsmmadrida-Repositorios-Control-Gesti-n-amsa-reporte-semanal/afac2cfb-d11b-422c-bcfd-c30277d9c0c6/scratchpad/test_regresion.py\")",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git commit --quiet -m ' *)",
+      "Bash(./.venv/Scripts/python.exe -c \"import main, core.renderers, utils.word_utils; print\\('imports OK'\\)\")"
     ]
   }
 }
