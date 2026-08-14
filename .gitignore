@@ -1,0 +1,10 @@
+# Bytecode de Python: se regenera en cada ejecución del generador
+__pycache__/
+*.py[cod]
+
+# Entorno virtual local
+.venv/
+
+# Archivos de bloqueo que Word/Excel crean al abrir la plantilla o el calendario
+~$*.docx
+~$*.xlsx
