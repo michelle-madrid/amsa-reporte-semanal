@@ -320,6 +320,38 @@ NIVEL_POR_COMPANIA_SECCION_SUBTITULO = {
     "CMZ": {"Mina": {"Movimiento Mina": 1}},
 }
 
+# Títulos de sección que el informe ya sabe tratar (tienen extractor y renderer
+# propios). Cualquier OTRO título suelto que venga en el Word de faena —párrafo
+# sin viñeta con el formato de título de ese Word— se considera una sección nueva
+# que el redactor agregó esa semana: se conserva tal cual en el informe y se
+# avisa. Esta lista además calibra la detección: de estos títulos se deduce con
+# qué formato marca sus títulos cada Word, así que conviene mantenerla completa.
+# Comparación normalizada (sin tildes, minúsculas) y por prefijo, así que
+# "Planta:" o "Medio Ambiente" calzan igual. Ver _titulos_sueltos_word.
+TITULOS_SECCION_CONOCIDOS = [
+    "Hechos Relevantes",
+    "Accidentabilidad",
+    "Reportabilidad",
+    "Gestión SSO",
+    "Salud Ocupacional y Gestión Vial",
+    "Medio Ambiente",
+    "Asuntos Públicos",
+    "Producción Semana",
+    "Principales Desviaciones",
+    "Mina",
+    "Detalle por fases",
+    "Planta",
+    "Planta Desaladora",
+    "Planta Hidro MET",
+    "Planta Hidro OXE",
+    "Concentradora",
+    "Sulfuros",
+    "Cátodos",
+    "Gestión Hídrica",
+    "Tren",
+    "Camión",
+]
+
 
 # Hojas adicionales del Excel madre que se validan por separado (no son compañías).
 # compania_fuente: clave cuyo Word contiene el texto de esa sección.

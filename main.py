@@ -323,6 +323,9 @@ def _construir_doc(
             # Ruta del Word fuente de esta faena (si existe) para que los renderers
             # puedan re-leer metadatos perdidos al aplanar el texto (ej. numeración).
             state.ruta_word_actual = (rutas_word or {}).get(clave)
+            # Títulos que el redactor agregó al Word de faena y que el informe no
+            # conoce: se avisan siempre, los conserve o no el renderer de la sección.
+            avisar_titulos_nuevos(clave, state.ruta_word_actual)
             procesador(doc, texto_compania, excel_para_faena)
             state.ruta_word_actual = None
 

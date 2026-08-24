@@ -152,6 +152,40 @@ El texto de cada Word de faena se extrae por bloques delimitados por títulos de
 - Los marcadores de viñeta del texto fuente (`•`, `·`, `○`, `o`) se preservan para clasificar el nivel correcto antes de ser reemplazados por el estilo Word
 - Se detectan y reportan líneas no clasificadas por faena
 
+### Secciones nuevas en el Word de faena
+
+El informe tiene una estructura fija de secciones, pero a veces el redactor agrega un título propio
+para algo excepcional de la semana (por ejemplo ANT sumó *Explicaciones por contingencia climática*
+por las lluvias del 17 y 18 de agosto de 2026). Ese título **se conserva**: no se aplana a una viñeta más.
+
+- Se detecta por **formato, no por texto**: un título nuevo es un párrafo del Word fuente que no es
+  viñeta de lista, no lleva sangría, viene marcado como título y no aparece en
+  `TITULOS_SECCION_CONOCIDOS` (`config.py`). Se ignora el encabezado del Word de faena — todo lo que
+  esté antes de la primera sección conocida —, las frases destacadas que terminan en punto y las
+  viñetas de KPI con forma `Etiqueta: (-1,880 kt; -22.4%) bajo PM...`, que son texto y no título.
+- Qué cuenta como "marcado como título" **lo define cada Word**: si subraya los títulos que ya
+  conocemos (`Detalle por fases`, `Mina`, `Accidentabilidad`...), entonces exige subrayado también
+  para los nuevos; si no subraya ninguno, se conforma con la negrita. La negrita sola no alcanza como
+  criterio general porque en los Word de faena también vienen en negrita las fechas de accidentes,
+  las notas al pie y las bajadas de texto. Por eso conviene mantener completa
+  `TITULOS_SECCION_CONOCIDOS`: es la que calibra la detección.
+- En el informe se escribe **con el mismo formato que los demás títulos de sección** (azul `#00778B`,
+  negrita, al margen y con dos puntos, igual que `Detalle por fases:`), no con el formato que traía en
+  el Word de faena: lo que se conserva es el texto del título, no su presentación. Las viñetas que
+  cuelgan de él sí conservan la jerarquía y la negrita del Word fuente, leídas del `w:ilvl` de la
+  lista o de la sangría izquierda.
+- El bloque completo se escribe **al final de la sección**, después de los acumulados, para no partir
+  el bloque de KPIs.
+- Siempre se avisa con un `[REVISAR] {FAENA}: SECCIÓN NUEVA en el Word de faena -> '{título}'`, aunque
+  el renderer de esa sección no la conserve, para revisar ubicación y formato a mano.
+
+> Conservar el título y la jerarquía está implementado en `procesar_seccion`, tanto en las secciones
+> de texto libre (las que en `ORDEN_PRINCIPALES_DESVIACIONES` tienen `[""]`) como en las que tienen
+> subtítulos (ej. ANT *Detalle por fases* con `["Extracción de Mineral", "Extracción de Lastre"]`).
+> Las secciones con renderer propio (`ant_render_mina`, `mlp_render_medio_ambiente`, ...) y las de
+> tipo `["?"]` quedan fuera: ahí el aviso sí se emite, pero el título se sigue renderizando con las
+> reglas de esa sección.
+
 ### Alineación de viñetas con círculo blanco
 
 Las viñetas manuales con círculo blanco (`○`) usan un **tab stop XML** inyectado vía `parse_xml` sobre el elemento `<w:pPr>` del párrafo, en lugar de espacios o NBSP. Esto garantiza que el texto siempre comience en la misma posición horizontal independientemente de cómo Word justifique los caracteres previos.

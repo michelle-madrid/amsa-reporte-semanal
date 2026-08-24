@@ -8,7 +8,7 @@ import datetime
 from docx import Document
 
 import state
-from config import CONFIG_COMPANIAS, INCLUIR_ESTADO_FASES_DESARROLLO, ORDEN_PRINCIPALES_DESVIACIONES, NIVEL_BASE_POR_SECCION, NIVEL_POR_COMPANIA_SECCION_SUBTITULO
+from config import CONFIG_COMPANIAS, INCLUIR_ESTADO_FASES_DESARROLLO, ORDEN_PRINCIPALES_DESVIACIONES, NIVEL_BASE_POR_SECCION, NIVEL_POR_COMPANIA_SECCION_SUBTITULO, TITULOS_SECCION_CONOCIDOS
 from state import errores
 from utils.text_utils import *
 from utils.text_utils import _quitar_dos_puntos_inicio, set_seccion_desviaciones
@@ -86,6 +86,226 @@ def _niveles_lista_word(ruta_word):
     if nivel is not None:
       niveles[clave] = nivel
   return niveles
+
+# ── Títulos nuevos del Word fuente ──────────────────────────────────────────
+# El informe tiene una estructura fija de secciones (Mina, Planta, ...), pero a
+# veces el redactor agrega un título propio para algo excepcional de esa semana
+# —p. ej. ANT sumó "Explicaciones por contingencia climática" por las lluvias de
+# agosto de 2026—. Al aplanar el Word ese título queda como una línea más y se
+# renderiza como viñeta, perdiendo tanto el título como la jerarquía que colgaba
+# de él. Se detecta por formato, no por texto: un título suelto es un párrafo
+# que no es viñeta de lista, no lleva sangría y viene marcado con el mismo
+# formato con que ESE Word marca los títulos que ya conocemos (ver más abajo).
+
+_MAX_LARGO_TITULO_SUELTO = 120
+
+# Formato de los párrafos del Word fuente, cacheado por (ruta, mtime, tamaño):
+# el mismo archivo se re-lee una vez por sección de la faena.
+_CACHE_FORMATO_FUENTE = {}
+
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+def _heredado_del_estilo(estilo, tag):
+  """Busca `tag` dentro del <w:pPr> del estilo del párrafo, subiendo por la
+  cadena de estilos base. Word define la viñeta y la sangría en el estilo cuando
+  vienen de "Lista con viñetas" en vez del botón de la barra de herramientas."""
+  vistos = set()
+  while estilo is not None and id(estilo) not in vistos:
+    vistos.add(id(estilo))
+    pPr = estilo.element.find(f"{_W}pPr")
+    if pPr is not None:
+      hallado = pPr.find(f"{_W}{tag}")
+      if hallado is not None:
+        return hallado
+    estilo = estilo.base_style
+  return None
+
+def _formato_fuente_word(ruta_word):
+  """Devuelve {texto_normalizado: {"texto", "nivel", "lista", "sangria",
+  "negrita", "subrayado"}} para cada párrafo del Word fuente. `nivel` es el nivel
+  de viñeta (None si el párrafo no da ninguna señal), tomado del w:ilvl de la
+  lista o derivado de la sangría izquierda. Solo se guarda la primera aparición
+  de cada texto."""
+  if not ruta_word or not os.path.isfile(ruta_word):
+    return {}
+  try:
+    st = os.stat(ruta_word)
+    cache_key = (ruta_word, st.st_mtime_ns, st.st_size)
+  except OSError:
+    return {}
+  if cache_key in _CACHE_FORMATO_FUENTE:
+    return _CACHE_FORMATO_FUENTE[cache_key]
+  try:
+    doc = Document(ruta_word)
+  except Exception:
+    return {}
+  formato = {}
+  for orden, p in enumerate(doc.paragraphs):
+    texto = (p.text or "").strip()
+    clave = _clave_nivel(texto)
+    if not clave or clave in formato:
+      continue
+    estilo = getattr(p, "style", None)
+    pPr = p._p.find(f"{_W}pPr")
+
+    numPr = pPr.find(f"{_W}numPr") if pPr is not None else None
+    if numPr is None:
+      numPr = _heredado_del_estilo(estilo, "numPr")
+    es_lista = numPr is not None
+
+    ind = pPr.find(f"{_W}ind") if pPr is not None else None
+    if ind is None or ind.get(f"{_W}left") is None:
+      ind = _heredado_del_estilo(estilo, "ind")
+    left = ind.get(f"{_W}left") if ind is not None else None
+    sangria = int(left) if left and left.lstrip("-").isdigit() else None
+
+    nivel = None
+    if numPr is not None:
+      ilvl = numPr.find(f"{_W}ilvl")
+      val = ilvl.get(f"{_W}val") if ilvl is not None else None
+      nivel = int(val) if val and val.lstrip("-").isdigit() else 0
+    elif sangria is not None:
+      nivel = max(0, round(sangria / _TWIPS_POR_NIVEL))
+
+    fuente_estilo = getattr(estilo, "font", None)
+    negrita = bool(getattr(fuente_estilo, "bold", None)) or any(
+      r.bold for r in p.runs if (r.text or "").strip())
+    subrayado = bool(getattr(fuente_estilo, "underline", None)) or any(
+      r.underline for r in p.runs if (r.text or "").strip())
+
+    formato[clave] = {
+      "texto": texto,
+      "orden": orden,
+      "nivel": nivel,
+      "lista": es_lista,
+      "sangria": sangria or 0,
+      "negrita": negrita,
+      "subrayado": subrayado,
+    }
+  _CACHE_FORMATO_FUENTE[cache_key] = formato
+  return formato
+
+def _es_titulo_conocido(texto):
+  """True si el título ya forma parte de la estructura fija del informe."""
+  clave = normalizar_texto_clave(texto).rstrip(":").strip()
+  return any(clave.startswith(normalizar_texto_clave(t)) for t in TITULOS_SECCION_CONOCIDOS)
+
+def _titulos_sueltos_word(ruta_word):
+  """{texto_normalizado: texto} de los títulos que el redactor agregó al Word
+  fuente y que el informe no conoce: párrafos sueltos (sin viñeta ni sangría)
+  marcados como títulos. El texto se devuelve tal cual venía en el original.
+
+  El encabezado del Word de faena (nombre de la faena, semana, etc.) también es
+  texto suelto en negrita, así que solo se miran los párrafos posteriores a la
+  primera sección conocida: antes de ella no hay contenido del informe.
+
+  La negrita sola no alcanza como señal: en los Word de faena vienen en negrita
+  las fechas de accidentes, las notas al pie y las bajadas de texto. El criterio
+  se calibra con cada Word usando sus propios títulos conocidos."""
+  formato = _formato_fuente_word(ruta_word)
+  conocidos = [f for f in formato.values() if _es_titulo_conocido(f["texto"])]
+  if not conocidos:
+    return {}
+  orden_primera_seccion = min(f["orden"] for f in conocidos)
+
+  # Con qué formato marca ESTE Word sus títulos de sección: si subraya los que ya
+  # conocemos, un título nuevo suyo también viene subrayado, y exigirlo descarta
+  # las viñetas en negrita que no son títulos (fechas de accidentes, notas al
+  # pie, bajadas de texto). Si el Word no subraya ninguno, la negrita es la única
+  # señal disponible y se usa esa.
+  exige_subrayado = any(f["subrayado"] for f in conocidos)
+
+  titulos = {}
+  for clave, fmt in formato.items():
+    if fmt["orden"] < orden_primera_seccion:
+      continue
+    if fmt["lista"] or fmt["sangria"] >= _TWIPS_POR_NIVEL:
+      continue
+    if len(fmt["texto"]) > _MAX_LARGO_TITULO_SUELTO or fmt["texto"].endswith("."):
+      continue  # termina en punto → es una frase destacada, no un título
+    if ":" in fmt["texto"].rstrip().rstrip(":"):
+      continue  # "Etiqueta: (-1,880 kt; -22.4%) bajo PM..." → viñeta de KPI, no
+                # un título. Un título es una etiqueta ("Detalle por fases",
+                # "Planta:"), nunca una etiqueta seguida de su contenido.
+    if not (fmt["subrayado"] if exige_subrayado else fmt["negrita"]):
+      continue
+    if _es_titulo_conocido(fmt["texto"]):
+      continue
+    titulos[clave] = fmt["texto"]
+  return titulos
+
+class _SeccionNuevaWord:
+  """Desvía a un bloque aparte todo lo que viene desde un título que el redactor
+  agregó al Word de faena: el título y las viñetas que cuelgan de él, con la
+  jerarquía y la negrita del original. El bloque se escribe al final de la
+  sección con _render_seccion_nueva, para no partir el bloque de KPIs de la
+  estructura fija."""
+
+  def __init__(self, ruta_word):
+    self._titulos = _titulos_sueltos_word(ruta_word)
+    self._formato = _formato_fuente_word(ruta_word)
+    self.bloques = []
+    self._nivel_raiz = None
+    self._desplazamiento_previo = 0
+
+  def captura(self, texto):
+    """True si la línea abre una sección nueva o cuelga de una ya abierta; en
+    ese caso queda guardada y la sección de estructura fija no debe escribirla."""
+    clave = _clave_nivel(texto)
+    if clave in self._titulos:
+      self.bloques.append({"tipo": "titulo", "texto": self._titulos[clave]})
+      self._nivel_raiz = None
+      self._desplazamiento_previo = 0
+      return True
+    if not self.bloques:
+      return False
+    fmt = self._formato.get(clave) or {}
+    nivel_fuente = fmt.get("nivel")
+    if nivel_fuente is None:
+      # Sin señal de nivel en el original (viñeta a mano, línea partida): se
+      # mantiene el nivel de la viñeta anterior.
+      desplazamiento = self._desplazamiento_previo
+    else:
+      if self._nivel_raiz is None or nivel_fuente < self._nivel_raiz:
+        self._nivel_raiz = nivel_fuente
+      desplazamiento = min(max(nivel_fuente - self._nivel_raiz, 0), 3)
+    self._desplazamiento_previo = desplazamiento
+    self.bloques.append({
+      "tipo": "viñeta",
+      "texto": clave,
+      "desplazamiento": desplazamiento,
+      "negrita": bool(fmt.get("negrita")),
+    })
+    return True
+
+# Color de los títulos de sección del informe (ver procesar_seccion).
+_COLOR_TITULO_SECCION = (0x00, 0x77, 0x8B)
+
+def _render_seccion_nueva(doc, bloques, nivel_base):
+  """Escribe el bloque de una sección nueva: el título con el mismo formato que
+  los títulos de sección del informe —azul, negrita, al margen y con dos puntos,
+  igual que "Detalle por fases:"— y sus viñetas con la jerarquía y la negrita del
+  original. El texto del título es el del Word de faena; lo que se normaliza es
+  la presentación, para que no se lea como algo aparte del resto del informe."""
+  for bloque in bloques:
+    if bloque["tipo"] == "titulo":
+      titulo = bloque["texto"].rstrip().rstrip(":").rstrip()
+      agregar_texto(doc, f"{titulo}:", bold=True, color=_COLOR_TITULO_SECCION)
+      continue
+    nivel = min(nivel_base + bloque["desplazamiento"], 4)
+    if bloque["negrita"]:
+      agregar_viñeta_full_bold(doc, bloque["texto"], nivel=nivel, espacio_despues=6)
+    else:
+      agregar_viñeta_plana(doc, bloque["texto"], nivel=nivel, espacio_despues=6)
+
+def avisar_titulos_nuevos(clave_compania, ruta_word):
+  """Avisa por consola y en el listado de errores de cada título nuevo que trae
+  el Word de la faena, lo haya conservado o no el renderer de la sección."""
+  for titulo in _titulos_sueltos_word(ruta_word).values():
+    msg = (f"{clave_compania}: SECCIÓN NUEVA en el Word de faena -> '{titulo}'. "
+           f"Se conservó el título y la jerarquía del original; revisar ubicación y formato.")
+    print(f"[REVISAR] {msg}")
+    errores.append(f"[REVISAR] {msg}")
 
 # Renderiza contenido específico dentro del documento Word.
 def mlp_render_medio_ambiente(doc, lineas):
@@ -831,12 +1051,22 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
             r"|^(?:lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\s",
             re.IGNORECASE,
         )
+        # Títulos que el redactor agregó al Word de faena esa semana (ej. ANT y
+        # "Explicaciones por contingencia climática"). Desde el título en adelante
+        # el contenido pertenece a la sección nueva: se acumula aparte y se escribe
+        # al final, después de los acumulados, para no partir el bloque de KPIs.
+        seccion_nueva = _SeccionNuevaWord(state.ruta_word_actual)
+
         # Cuando una viñeta principal termina en ":", las viñetas siguientes son
         # sub-ítems y deben ir un nivel más adentro hasta el próximo título principal.
         en_sublista = False
         for linea in contenido:
             texto_limpio = linea.strip()
             texto_base = re.sub(r"^[•○o·\-\s\u200b\ufeff]+", "", texto_limpio).strip()
+
+            if seccion_nueva.captura(texto_base):
+                en_sublista = False
+                continue
 
             if texto_base.lower().startswith("ley ") or texto_base.lower().startswith("recuperaci"):
                 linea = limpiar_parentesis_ley(linea)
@@ -876,16 +1106,24 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
         if nombre_compania == "ANT" and nombre_seccion == "Planta" and excel_madre:
             for linea_acum in extraer_acumulados_ant(excel_madre):
                 agregar_linea_acumulado(doc, linea_acum)
+        _render_seccion_nueva(doc, seccion_nueva.bloques, nivel_base)
         return
 
     grupos = {sub: [] for sub in orden_subtitulos}
     subtitulo_actual = None
     contenido_extra = []
     orden_subtitulos_match = sorted(orden_subtitulos, key=len, reverse=True)
+    # Igual que en las secciones sin subtítulos: un título que el redactor agregó
+    # al Word —ANT sumó "Explicaciones por contingencia climática" dentro de
+    # "Detalle por fases"— no es una viñeta más del último subtítulo. Se desvía
+    # junto con todo lo que cuelga de él y se escribe al final de la sección.
+    seccion_nueva = _SeccionNuevaWord(state.ruta_word_actual)
 
     for linea in contenido:
         texto = linea.strip()
         if not texto:
+            continue
+        if seccion_nueva.captura(texto):
             continue
         texto_norm = texto.lower()
         match = None
@@ -940,6 +1178,8 @@ def procesar_seccion(doc, texto_compania, nombre_compania, nombre_seccion, orden
                 agregar_viñeta(doc, texto, nivel=nivel_actual, espacio_despues=6)
 
             primera = False
+
+    _render_seccion_nueva(doc, seccion_nueva.bloques, nivel_base)
 
 # Renderiza contenido específico dentro del documento Word.
 def cen_render_medio_ambiente(doc, lineas):
