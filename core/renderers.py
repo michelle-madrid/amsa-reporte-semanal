@@ -67,7 +67,7 @@ def _niveles_lista_word(ruta_word):
     return {}
   W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
   niveles = {}
-  for p in doc.paragraphs:
+  for p in parrafos_en_orden(doc):
     clave = _clave_nivel(p.text)
     pPr = p._p.find(f"{W}pPr")
     if not clave or clave in niveles or pPr is None:
@@ -140,7 +140,7 @@ def _formato_fuente_word(ruta_word):
   except Exception:
     return {}
   formato = {}
-  for orden, p in enumerate(doc.paragraphs):
+  for orden, p in enumerate(parrafos_en_orden(doc)):
     texto = (p.text or "").strip()
     clave = _clave_nivel(texto)
     if not clave or clave in formato:
@@ -1398,7 +1398,7 @@ def _textos_numerados_word(ruta_word):
     return set()
   W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
   numeradas = set()
-  for p in doc.paragraphs:
+  for p in parrafos_en_orden(doc):
     t = p.text.strip()
     if t and (pPr := p._p.find(f"{W}pPr")) is not None and pPr.find(f"{W}numPr") is not None:
       numeradas.add(t)
@@ -1406,7 +1406,10 @@ def _textos_numerados_word(ruta_word):
 
 # Renderiza contenido específico dentro del documento Word.
 def mlp_render_planta_desaladora(doc, texto_compania, excel_madre=None):
-  contenido = [linea.strip() for linea in extraer_planta_desaladora(texto_compania) if linea.strip()]
+  # Sin el marcador de viñeta que el redactor pone a mano ("•\t21 de agosto:
+  # ..."): la viñeta ○ y la negrita de la fecha las pone este renderer, y con el
+  # marcador delante la línea ya no se reconocía como fecha.
+  contenido = [_clave_nivel(linea) for linea in extraer_planta_desaladora(texto_compania) if linea.strip()]
   if not contenido:
     return
 

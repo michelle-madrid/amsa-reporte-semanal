@@ -152,6 +152,33 @@ El texto de cada Word de faena se extrae por bloques delimitados por títulos de
 - Los marcadores de viñeta del texto fuente (`•`, `·`, `○`, `o`) se preservan para clasificar el nivel correcto antes de ser reemplazados por el estilo Word
 - Se detectan y reportan líneas no clasificadas por faena
 
+#### Texto dentro de tablas del Word de faena
+
+`extraer_texto_word` recorre el cuerpo del documento **en orden** e incluye los párrafos que estén
+dentro de una **tabla de una sola columna**: el redactor a veces encierra un bloque en una tabla así
+para encuadrarlo (MLP metió toda la *Concentradora* de la semana 34 de 2026 en una) y leer solo
+`doc.paragraphs` hacía desaparecer la sección completa del informe, sin aviso.
+
+- Las tablas de **más de una columna** son datos tabulares —el informe los toma del Excel madre, no
+  del Word— y se omiten, avisando con `[REVISAR] Word de faena: tabla de NxM omitida...` y la primera
+  celda, para poder ubicarla en el original.
+- Los helpers que releen el Word fuente para recuperar lo que se pierde al aplanarlo
+  (`_niveles_lista_word`, `_formato_fuente_word`, `_textos_numerados_word`) usan el mismo recorrido,
+  así que una viñeta encerrada en tabla conserva su nivel, su negrita y su numeración.
+
+#### Títulos de sección escritos de otra forma
+
+Los títulos que delimitan los bloques no vienen siempre escritos igual: MLP escribió
+`Planta Desaladora` hasta la semana 30 de 2026, `Planta Desaladora:` desde la 31 y
+`Planta desaladora:` en la 34. Por eso la comparación se hace sobre el texto **normalizado** —sin
+marcador de viñeta, sin tildes, en minúsculas y sin los dos puntos del final— y no sobre el literal
+(`es_titulo_seccion` / `empieza_titulo_seccion` en `core/extractores.py`).
+
+Un título que no calza es doblemente caro y silencioso: la sección propia queda vacía y, si lo que
+falla es el corte de la sección anterior, esa se lleva el resto del documento. Es exactamente lo que
+pasó con MLP en la semana 34 de 2026: *Concentradora* se comió *Planta Desaladora* y *Gestión
+Hídrica*, y ambas se perdieron junto con la imagen de la tabla de Gestión Hídrica.
+
 ### Secciones nuevas en el Word de faena
 
 El informe tiene una estructura fija de secciones, pero a veces el redactor agrega un título propio
